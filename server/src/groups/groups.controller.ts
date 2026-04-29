@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common'
+import { Controller, Get, Post, Body, Query, Headers } from '@nestjs/common'
 import { GroupsService } from './groups.service'
 import { Member, PointsRecord } from './types'
 
@@ -39,6 +39,17 @@ export class GroupsController {
       code: 200,
       message: 'success',
       data: members
+    }
+  }
+
+  @Get('my-group')
+  async getMyGroup(@Headers('authorization') authHeader?: string) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const result = await this.groupsService.getMyGroup(token)
+    return {
+      code: 200,
+      message: 'success',
+      data: result
     }
   }
 }

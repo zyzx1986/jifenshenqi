@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 import { Group, Member, PointsRecord } from './types'
+import * as jwt from 'jsonwebtoken'
 
 @Injectable()
 export class GroupsService {
   private client = getSupabaseClient()
+  private jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
 
   async createGroup(name: string, memberName: string): Promise<{ group: Group; member: Member }> {
     const userId = `user_${Date.now()}`
@@ -221,5 +223,49 @@ export class GroupsService {
       code += chars.charAt(Math.floor(Math.random() * chars.length))
     }
     return code
+  }
+
+  // 获取用户已加入的群组
+  async getMyGroup(token: string): Promise<{ group: Group; member: Member } | null> {
+    try {
+      // 解析 token 获取用户信息
+      const decoded = jwt.verify(token, this.jwtSecret) as any
+      const userId = decoded.userId
+
+      // 查询用户加入的群组
+      const { data: memberData, error: memberError } = await this.client
+        .from('members')
+        .select('*, groups(*)')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (memberError) {
+        console.error('查询用户群组失败:', memberError)
+        return null
+      }
+
+      if (!memberData) {
+        return null
+      }
+
+      const member = memberData as any
+      const group = member.groups as Group
+
+      return {
+        group,
+        member: {
+          id: member.id,
+          group_id: member.group_id,
+          user_id: member.user_id,
+          name: member.name,
+          total_points: member.total_points,
+          created_at: member.created_at,
+          updated_at: member.updated_at
+        }
+      }
+    } catch (error) {
+      console.error('获取用户群组失败:', error)
+      return null
+    }
   }
 }

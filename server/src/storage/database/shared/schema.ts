@@ -8,6 +8,22 @@ export const healthCheck = pgTable("health_check", {
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 });
 
+// 用户表
+export const users = pgTable(
+	"users",
+	{
+		id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+		openid: varchar("openid", { length: 100 }).notNull().unique(),
+		nickname: varchar("nickname", { length: 50 }).notNull(),
+		avatar_url: varchar("avatar_url", { length: 500 }),
+		created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updated_at: timestamp("updated_at", { withTimezone: true }),
+	},
+	(table) => [
+		index("users_openid_idx").on(table.openid),
+	]
+);
+
 // 群组表
 export const groups = pgTable(
 	"groups",
