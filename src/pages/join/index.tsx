@@ -1,13 +1,15 @@
-import { View, Text } from '@tarojs/components'
-import { useLoad, showToast, switchTab } from '@tarojs/taro'
+import { View, Text, Image } from '@tarojs/components'
+import Taro, { useLoad, showToast, switchTab, useShareAppMessage } from '@tarojs/taro'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Dialog } from '@/components/ui/dialog'
 import { useGroupStore } from '@/stores/group'
 import { Network } from '@/network'
+import QRCode from 'qrcode'
 
 const JoinPage = () => {
   const { setCurrentGroup, setCurrentMember } = useGroupStore()
@@ -16,6 +18,9 @@ const JoinPage = () => {
   const [inviteCode, setInviteCode] = useState('')
   const [memberName, setMemberName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showQRCode, setShowQRCode] = useState(false)
+  const [qrCodeUrl, setQrCodeUrl] = useState('')
+  const [currentGroup, setCurrentGroupLocal] = useState<any>(null)
 
   const createGroup = async () => {
     if (!groupName.trim()) {
@@ -45,10 +50,18 @@ const JoinPage = () => {
       if (group && member) {
         setCurrentGroup(group)
         setCurrentMember(member)
+        setCurrentGroupLocal(group)
+
+        // 生成二维码
+        const qrData = `invite_code=${group.invite_code}`
+        const qrImage = await QRCode.toDataURL(qrData, {
+          width: 200,
+          margin: 2
+        })
+        setQrCodeUrl(qrImage)
+        setShowQRCode(true)
+
         showToast({ title: '创建成功', icon: 'success' })
-        setTimeout(() => {
-          switchTab({ url: '/pages/index/index' })
-        }, 500)
       }
     } catch (error) {
       console.error('创建群组失败:', error)
@@ -99,7 +112,40 @@ const JoinPage = () => {
     }
   }
 
+  const handleShare = () => {
+    showToast({ title: '点击右上角菜单分享', icon: 'none' })
+  }
+
+  const handleCloseQRCode = () => {
+    setShowQRCode(false)
+    setTimeout(() => {
+      switchTab({ url: '/pages/index/index' })
+    }, 300)
+  }
+
+  // 分享配置
+  useShareAppMessage(() => {
+    return {
+      title: `邀请你加入群组「${currentGroup?.name || '积分管理'}」`,
+      path: `/pages/join/index?invite_code=${currentGroup?.invite_code || ''}`,
+      imageUrl: ''
+    }
+  })
+
+  // 检查是否从分享链接进入
   useLoad(() => {
+    const instance = Taro.getCurrentInstance()
+    const params = instance.router?.params || {}
+
+    if (params.invite_code) {
+      setInviteCode(params.invite_code)
+      setActiveTab('join')
+      showToast({
+        title: '已自动填写邀请码',
+        icon: 'none'
+      })
+    }
+
     console.log('Join page loaded.')
   })
 
@@ -189,6 +235,55 @@ const JoinPage = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* 二维码弹框 */}
+      <Dialog open={showQRCode} onOpenChange={setShowQRCode}>
+        <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <View className="bg-white rounded-xl w-full max-w-sm p-6">
+            <View className="text-center mb-6">
+              <Text className="block text-lg font-semibold text-gray-900 mb-2">
+                群组二维码
+              </Text>
+              <Text className="block text-sm text-gray-500 mb-4">
+                扫码即可加入群组
+              </Text>
+
+              {qrCodeUrl && (
+                <View className="flex justify-center mb-4">
+                  <Image
+                    src={qrCodeUrl}
+                    className="w-48 h-48"
+                    mode="aspectFit"
+                  />
+                </View>
+              )}
+
+              <View className="bg-gray-50 rounded-lg p-3 mb-2">
+                <Text className="block text-xs text-gray-500 mb-1">邀请码</Text>
+                <Text className="block text-lg font-bold text-gray-900">
+                  {currentGroup?.invite_code}
+                </Text>
+              </View>
+            </View>
+
+            <View className="space-y-3">
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={handleShare}
+              >
+                分享给好友
+              </Button>
+              <Button
+                className="w-full"
+                onClick={handleCloseQRCode}
+              >
+                完成
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Dialog>
     </View>
   )
 }
