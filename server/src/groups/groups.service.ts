@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 import { Group, Member, PointsRecord } from './types'
 import * as jwt from 'jsonwebtoken'
+import * as QRCode from 'qrcode'
 
 @Injectable()
 export class GroupsService {
@@ -266,6 +267,22 @@ export class GroupsService {
     } catch (error) {
       console.error('获取用户群组失败:', error)
       return null
+    }
+  }
+
+  // 生成二维码
+  async generateQRCode(inviteCode: string): Promise<string> {
+    try {
+      const qrData = `invite_code=${inviteCode}`
+      const qrDataUrl = await QRCode.toDataURL(qrData, {
+        width: 200,
+        margin: 2,
+        errorCorrectionLevel: 'M'
+      })
+      return qrDataUrl
+    } catch (error) {
+      console.error('生成二维码失败:', error)
+      throw new Error('生成二维码失败')
     }
   }
 }

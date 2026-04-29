@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useGroupStore } from '@/stores/group'
 import { Network } from '@/network'
-import QRCode from 'qrcode'
 
 const JoinPage = () => {
   const { setCurrentGroup, setCurrentMember } = useGroupStore()
@@ -60,22 +59,27 @@ const JoinPage = () => {
         // 保存到本地存储，用于分享配置
         Taro.setStorageSync('currentGroup', group)
 
-        // 生成二维码
+        // 获取二维码
         try {
-          const qrData = `invite_code=${group.invite_code}`
-          const qrImage = await QRCode.toDataURL(qrData, {
-            width: 200,
-            margin: 2,
-            errorCorrectionLevel: 'M'
+          const qrRes = await Network.request({
+            url: `/api/groups/qrcode?invite_code=${group.invite_code}`,
+            method: 'GET'
           })
-          setQrCodeUrl(qrImage)
-          setShowQRCode(true)
-          console.log('二维码生成成功')
+
+          console.log('二维码响应:', qrRes.data)
+
+          const qrDataUrl = qrRes.data?.data?.qr_code
+          if (qrDataUrl) {
+            setQrCodeUrl(qrDataUrl)
+            console.log('二维码获取成功')
+          } else {
+            console.warn('二维码响应格式异常')
+          }
         } catch (qrError) {
-          console.error('二维码生成失败:', qrError)
-          setShowQRCode(true)
+          console.error('获取二维码失败:', qrError)
         }
 
+        setShowQRCode(true)
         showToast({ title: '创建成功', icon: 'success' })
       } else {
         console.error('返回数据格式错误:', res.data)

@@ -52,6 +52,18 @@ export class GroupsController {
       data: result
     }
   }
+
+  @Get('qrcode')
+  async generateQRCode(@Query('invite_code') inviteCode: string) {
+    const qrDataUrl = await this.groupsService.generateQRCode(inviteCode)
+    return {
+      code: 200,
+      message: 'success',
+      data: {
+        qr_code: qrDataUrl
+      }
+    }
+  }
 }
 
 @Controller('members')
