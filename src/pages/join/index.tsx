@@ -2,6 +2,7 @@ import { View, Text, Image } from '@tarojs/components'
 import Taro, { useLoad, showToast, switchTab, useShareAppMessage } from '@tarojs/taro'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ShareButton } from '@/components/ui/share-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -138,17 +139,6 @@ const JoinPage = () => {
     } finally {
       setLoading(false)
     }
-  }
-
-  // 调用微信分享API
-  const handleShare = () => {
-    if (!currentGroup) {
-      showToast({ title: '群组信息不存在', icon: 'none' })
-      return
-    }
-
-    // 小程序中点击右上角分享按钮会自动触发
-    showToast({ title: '请点击右上角菜单分享', icon: 'none' })
   }
 
   // 关闭二维码弹框
@@ -326,13 +316,9 @@ const JoinPage = () => {
             </View>
 
             <View className="space-y-3">
-              <Button
-                className="w-full"
-                variant="outline"
-                onClick={handleShare}
-              >
+              <ShareButton className="w-full">
                 分享给好友
-              </Button>
+              </ShareButton>
               <Button
                 className="w-full"
                 onClick={handleCloseQRCode}

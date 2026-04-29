@@ -64,4 +64,4 @@ const Button = React.forwardRef<React.ElementRef<typeof View>, ButtonProps>(
 )
 Button.displayName = "Button"
 
-export { Button, buttonVariants }
+export { Button, buttonVariants, type VariantProps }
