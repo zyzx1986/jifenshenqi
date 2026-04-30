@@ -223,7 +223,7 @@ const JoinPage = () => {
       console.error('加入房间失败:', error)
       const errorMsg = error?.errMsg || error?.message || ''
       if (errorMsg.includes('已经是成员')) {
-        showToast({ title: '您已经是该群组成员', icon: 'none' })
+        showToast({ title: '您已经是该房间成员', icon: 'none' })
         setTimeout(() => {
           switchTab({ url: '/pages/index/index' })
         }, 1000)
@@ -303,7 +303,7 @@ const JoinPage = () => {
       console.error('快速加入失败:', error)
       const errorMsg = error?.errMsg || error?.message || ''
       if (errorMsg.includes('已经是成员')) {
-        showToast({ title: '您已经是该群组成员', icon: 'none' })
+        showToast({ title: '您已经是该房间成员', icon: 'none' })
         setTimeout(() => {
           switchTab({ url: '/pages/index/index' })
         }, 1000)

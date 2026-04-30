@@ -135,13 +135,13 @@ const IndexPage = () => {
       <View className="min-h-screen bg-gray-50 px-4 py-6">
         <View className="flex flex-col items-center justify-center h-full">
           <Text className="block text-lg font-semibold text-gray-900 mb-4">
-            还未加入群组
+            还未加入房间
           </Text>
           <Text className="block text-sm text-gray-500 mb-8">
-            加入或创建群组后开始积分管理
+            加入或开房后开始积分管理
           </Text>
           <Button onClick={handleJoinGroup}>
-            加入/创建群组
+            加入/开房
           </Button>
         </View>
       </View>
@@ -150,13 +150,13 @@ const IndexPage = () => {
 
   return (
     <View className="min-h-screen bg-gray-50 pb-20">
-      {/* 顶部群组信息 */}
+      {/* 顶部房间信息 */}
       <View className="bg-white px-4 py-4 mb-4">
         <Text className="block text-lg font-semibold text-gray-900 mb-1">
           {currentGroup.name}
         </Text>
         <Text className="block text-sm text-gray-500">
-          邀请码: {currentGroup.invite_code}
+          房号: {currentGroup.invite_code}
         </Text>
       </View>
 

@@ -44,13 +44,13 @@ const ProfilePage = () => {
 
   const leaveGroup = () => {
     showModal({
-      title: '退出群组',
-      content: '确定要退出当前群组吗？',
+      title: '退出房间',
+      content: '确定要退出当前房间吗？',
       success: (res) => {
         if (res.confirm) {
           setCurrentGroup(null)
           setCurrentMember(null)
-          showToast({ title: '已退出群组', icon: 'success' })
+          showToast({ title: '已退出房间', icon: 'success' })
         }
       }
     })
@@ -62,7 +62,7 @@ const ProfilePage = () => {
     setClipboardData({
       data: currentGroup.invite_code,
       success: () => {
-        showToast({ title: '邀请码已复制', icon: 'success' })
+        showToast({ title: '房号已复制', icon: 'success' })
       }
     })
   }
@@ -88,21 +88,21 @@ const ProfilePage = () => {
 
       {currentGroup ? (
         <View className="flex flex-col gap-4">
-          {/* 群组信息 */}
+          {/* 房间信息 */}
           <Card className="bg-white">
             <CardHeader>
-              <CardTitle className="text-base">当前群组</CardTitle>
+              <CardTitle className="text-base">当前房间</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <View>
-                <Label>群组名称</Label>
+                <Label>房间名称</Label>
                 <Text className="block text-sm text-gray-700 mt-1">
                   {currentGroup.name}
                 </Text>
               </View>
 
               <View>
-                <Label>邀请码</Label>
+                <Label>房号</Label>
                 <View className="flex items-center gap-2 mt-1">
                   <Text className="block text-sm text-gray-700 flex-1">
                     {currentGroup.invite_code}
@@ -165,13 +165,13 @@ const ProfilePage = () => {
             </CardContent>
           </Card>
 
-          {/* 退出群组 */}
+          {/* 退出房间 */}
           <Button
             variant="destructive"
             className="w-full"
             onClick={leaveGroup}
           >
-            退出群组
+            退出房间
           </Button>
         </View>
       ) : (
@@ -180,10 +180,10 @@ const ProfilePage = () => {
             <CardContent className="p-6">
               <View className="flex flex-col items-center">
                 <Text className="block text-base text-gray-700 mb-4 text-center">
-                  还未加入群组
+                  还未加入房间
                 </Text>
                 <Button onClick={() => navigateTo({ url: '/pages/join/index' })}>
-                  加入/创建群组
+                  加入/开房
                 </Button>
               </View>
             </CardContent>
