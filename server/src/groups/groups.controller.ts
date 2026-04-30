@@ -115,6 +115,93 @@ export class GroupsController {
       data: success
     }
   }
+
+  // 创建或更新对局（保存当前对局状态）
+  @Post('game/save')
+  async saveGameSession(
+    @Body() body: {
+      group_id: string
+      room_name: string
+      invite_code: string
+      participants: any[]
+      rounds: any[]
+    },
+    @Headers('authorization') authHeader?: string
+  ) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const session = await this.groupsService.saveGameSession(token, body)
+    return {
+      code: 200,
+      message: 'success',
+      data: session
+    }
+  }
+
+  // 获取当前对局状态（恢复对局）
+  @Get('game/current')
+  async getCurrentGameSession(
+    @Query('invite_code') inviteCode: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const session = await this.groupsService.getCurrentGameSession(token, inviteCode)
+    return {
+      code: 200,
+      message: 'success',
+      data: session
+    }
+  }
+
+  // 结束对局并保存到历史
+  @Post('game/finish')
+  async finishGame(
+    @Body() body: {
+      group_id: string
+      invite_code: string
+      participants: any[]
+      rounds: any[]
+      total_rounds: number
+    },
+    @Headers('authorization') authHeader?: string
+  ) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const history = await this.groupsService.finishGame(token, body)
+    return {
+      code: 200,
+      message: 'success',
+      data: history
+    }
+  }
+
+  // 获取对局历史记录（战绩）
+  @Get('game/history')
+  async getGameHistory(
+    @Query('invite_code') inviteCode: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const history = await this.groupsService.getGameHistory(token, inviteCode)
+    return {
+      code: 200,
+      message: 'success',
+      data: history
+    }
+  }
+
+  // 获取战绩统计
+  @Get('game/stats')
+  async getGameStats(
+    @Query('invite_code') inviteCode: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const stats = await this.groupsService.getGameStats(token, inviteCode)
+    return {
+      code: 200,
+      message: 'success',
+      data: stats
+    }
+  }
 }
 
 @Controller('members')

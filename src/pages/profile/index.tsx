@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useGroupStore } from '@/stores/group'
 import { Network } from '@/network'
+import { History, ChartBarBig } from 'lucide-react-taro'
 
 const ProfilePage = () => {
   const { currentGroup, currentMember, setCurrentGroup, setCurrentMember } = useGroupStore()
@@ -182,7 +183,18 @@ const ProfilePage = () => {
             className="w-full"
             onClick={() => navigateTo({ url: '/pages/room-history/index' })}
           >
-            查看开房历史
+            <History size={18} />
+            <Text className="ml-2">查看开房历史</Text>
+          </Button>
+
+          {/* 战绩统计 */}
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => navigateTo({ url: '/pages/stats/index' })}
+          >
+            <ChartBarBig size={18} />
+            <Text className="ml-2">战绩统计</Text>
           </Button>
         </View>
       ) : (

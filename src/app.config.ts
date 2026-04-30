@@ -4,6 +4,7 @@ export default defineAppConfig({
     'pages/login/index',
     'pages/ranking/index',
     'pages/history/index',
+    'pages/stats/index',
     'pages/profile/index',
     'pages/join/index',
     'pages/room-history/index'
@@ -37,6 +38,12 @@ export default defineAppConfig({
         text: '明细',
         iconPath: './assets/tabbar/list.png',
         selectedIconPath: './assets/tabbar/list-active.png'
+      },
+      {
+        pagePath: 'pages/stats/index',
+        text: '战绩',
+        iconPath: './assets/tabbar/chart-bar-big.png',
+        selectedIconPath: './assets/tabbar/chart-bar-big-active.png'
       },
       {
         pagePath: 'pages/profile/index',
