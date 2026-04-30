@@ -24,7 +24,7 @@ const JoinPage = () => {
   const [showAutoJoin, setShowAutoJoin] = useState(false)
 
   // 获取微信昵称作为默认昵称
-  const fetchWechatNickname = () => {
+  const fetchWechatNickname = async (autoJoin = false) => {
     return new Promise<string>((resolve) => {
       // 尝试从本地存储获取缓存的昵称
       const cachedNickname = Taro.getStorageSync('wechatNickname')
@@ -33,45 +33,65 @@ const JoinPage = () => {
         return
       }
 
-      // 如果有邀请码且还没获取昵称，弹窗询问
-      if (inviteCode && !memberName) {
-        Taro.showModal({
-          title: '获取昵称',
-          content: '是否使用您的微信昵称快速加入群组？',
-          confirmText: '使用昵称',
-          cancelText: '手动输入',
-          success: (res) => {
-            if (res.confirm) {
-              // 获取微信昵称
-              if (typeof wx !== 'undefined' && wx.getUserProfile) {
-                wx.getUserProfile({
-                  desc: '用于快速加入群组',
-                  success: (userRes) => {
-                    const nickname = userRes.userInfo?.nickName || ''
-                    if (nickname) {
-                      Taro.setStorageSync('wechatNickname', nickname)
-                      resolve(nickname)
-                    } else {
-                      resolve('')
-                    }
-                  },
-                  fail: () => {
-                    resolve('')
-                  }
-                })
+      // 如果没有 wx.getUserProfile，使用 wx.getUserInfo（旧API）
+      if (typeof wx !== 'undefined') {
+        // 优先使用 getUserProfile（新API）
+        if (wx.getUserProfile) {
+          wx.getUserProfile({
+            desc: '用于快速加入群组或创建群组',
+            success: (userRes) => {
+              const nickname = userRes.userInfo?.nickName || ''
+              if (nickname) {
+                Taro.setStorageSync('wechatNickname', nickname)
+                resolve(nickname)
               } else {
                 resolve('')
               }
-            } else {
+            },
+            fail: () => {
               resolve('')
             }
-          }
-        })
+          })
+        } else if (wx.getUserInfo) {
+          // 旧版 API 作为降级
+          wx.getUserInfo({
+            success: (userRes) => {
+              const nickname = userRes.userInfo?.nickName || ''
+              if (nickname) {
+                Taro.setStorageSync('wechatNickname', nickname)
+                resolve(nickname)
+              } else {
+                resolve('')
+              }
+            },
+            fail: () => {
+              resolve('')
+            }
+          })
+        } else {
+          resolve('')
+        }
       } else {
         resolve('')
       }
     })
   }
+
+  // 页面加载时获取微信昵称
+  useEffect(() => {
+    // 页面加载时尝试获取昵称
+    const cachedNickname = Taro.getStorageSync('wechatNickname')
+    if (cachedNickname) {
+      setMemberName(cachedNickname)
+    } else {
+      // 静默获取昵称，不弹窗
+      fetchWechatNickname().then((nickname) => {
+        if (nickname) {
+          setMemberName(nickname)
+        }
+      })
+    }
+  }, [])
 
   // 创建群组
   const createGroup = async () => {
@@ -80,13 +100,20 @@ const JoinPage = () => {
       return
     }
 
-    if (!memberName.trim()) {
-      showToast({ title: '请输入您的昵称', icon: 'none' })
-      return
-    }
-
     setLoading(true)
     try {
+      // 如果没有输入昵称，自动获取微信昵称
+      let nickname = memberName.trim()
+      if (!nickname) {
+        nickname = await fetchWechatNickname()
+        if (!nickname) {
+          showToast({ title: '请输入您的昵称', icon: 'none' })
+          setLoading(false)
+          return
+        }
+        setMemberName(nickname)
+      }
+
       const res = await Network.request({
         url: '/api/groups/create',
         method: 'POST',
@@ -153,13 +180,20 @@ const JoinPage = () => {
       return
     }
 
-    if (!memberName.trim()) {
-      showToast({ title: '请输入您的昵称', icon: 'none' })
-      return
-    }
-
     setLoading(true)
     try {
+      // 如果没有输入昵称，自动获取微信昵称
+      let nickname = memberName.trim()
+      if (!nickname) {
+        nickname = await fetchWechatNickname()
+        if (!nickname) {
+          showToast({ title: '请输入您的昵称', icon: 'none' })
+          setLoading(false)
+          return
+        }
+        setMemberName(nickname)
+      }
+
       const res = await Network.request({
         url: '/api/groups/join',
         method: 'POST',
