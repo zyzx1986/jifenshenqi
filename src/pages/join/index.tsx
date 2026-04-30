@@ -38,7 +38,7 @@ const JoinPage = () => {
         // 优先使用 getUserProfile（新API）
         if (wx.getUserProfile) {
           wx.getUserProfile({
-            desc: '用于快速加入房间或开放',
+            desc: '用于快速加入房间或开房',
             success: (userRes) => {
               const nickname = userRes.userInfo?.nickName || ''
               if (nickname) {
@@ -93,7 +93,7 @@ const JoinPage = () => {
     }
   }, [])
 
-  // 开放
+  // 开房
   const createGroup = async () => {
     if (!groupName.trim()) {
       showToast({ title: '请输入房间名称', icon: 'none' })
@@ -123,7 +123,7 @@ const JoinPage = () => {
         }
       })
 
-      console.log('开放响应:', res.data)
+      console.log('开房响应:', res.data)
 
       const responseData = res.data?.data || res.data
       const group = responseData?.group
@@ -166,7 +166,7 @@ const JoinPage = () => {
         showToast({ title: '创建失败，返回数据异常', icon: 'none' })
       }
     } catch (error) {
-      console.error('开放失败:', error)
+      console.error('开房失败:', error)
       showToast({ title: '创建失败，请稍后重试', icon: 'none' })
     } finally {
       setLoading(false)
@@ -352,13 +352,13 @@ const JoinPage = () => {
   return (
     <View className="min-h-screen bg-gray-50 px-4 py-6">
       <Text className="block text-lg font-semibold text-gray-900 mb-6">
-        加入/开放
+        加入/开房
       </Text>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'join' | 'create')}>
         <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="join">加入房间</TabsTrigger>
-          <TabsTrigger value="create">开放</TabsTrigger>
+          <TabsTrigger value="create">开房</TabsTrigger>
         </TabsList>
 
         <TabsContent value="join">
@@ -424,7 +424,7 @@ const JoinPage = () => {
         <TabsContent value="create">
           <Card className="bg-white">
             <CardHeader>
-              <CardTitle className="text-base">开放</CardTitle>
+              <CardTitle className="text-base">开房</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <View>
