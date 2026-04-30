@@ -5,7 +5,8 @@ export default defineAppConfig({
     'pages/ranking/index',
     'pages/history/index',
     'pages/profile/index',
-    'pages/join/index'
+    'pages/join/index',
+    'pages/room-history/index'
   ],
   window: {
     backgroundTextStyle: 'light',

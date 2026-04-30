@@ -59,6 +59,22 @@ export const members = pgTable(
 	]
 );
 
+// 用户创建的房间历史记录表
+export const userRooms = pgTable(
+	"user_rooms",
+	{
+		id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+		user_id: varchar("user_id", { length: 36 }).notNull(),
+		group_id: varchar("group_id", { length: 36 }).notNull(),
+		room_name: varchar("room_name", { length: 100 }).notNull(),
+		invite_code: varchar("invite_code", { length: 10 }).notNull(),
+		created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("user_rooms_user_id_idx").on(table.user_id),
+	]
+);
+
 // 积分记录表
 export const pointsRecords = pgTable(
 	"points_records",

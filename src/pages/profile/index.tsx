@@ -173,6 +173,15 @@ const ProfilePage = () => {
           >
             退出房间
           </Button>
+
+          {/* 开房历史 */}
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => navigateTo({ url: '/pages/room-history/index' })}
+          >
+            查看开房历史
+          </Button>
         </View>
       ) : (
         <View className="flex flex-col gap-4">
@@ -188,6 +197,15 @@ const ProfilePage = () => {
               </View>
             </CardContent>
           </Card>
+
+          {/* 开房历史 */}
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => navigateTo({ url: '/pages/room-history/index' })}
+          >
+            查看开房历史
+          </Button>
         </View>
       )}
     </View>

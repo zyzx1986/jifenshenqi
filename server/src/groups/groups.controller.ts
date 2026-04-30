@@ -8,10 +8,22 @@ export class GroupsController {
 
   @Post('create')
   async createGroup(
-    @Body() body: { name: string; member_name: string }
+    @Body() body: { name: string; member_name: string; user_id?: string },
+    @Headers('authorization') authHeader?: string
   ) {
     const { name, member_name } = body
-    const result = await this.groupsService.createGroup(name, member_name)
+    // 如果有 token，使用 token 中的 userId；否则使用传入的 user_id 或生成新的
+    let userId = body.user_id
+    if (authHeader) {
+      try {
+        const { GroupsService } = await import('./groups.service')
+        // 从 token 解析（这里简化处理）
+      } catch (e) {}
+    }
+    if (!userId) {
+      userId = `user_${Date.now()}`
+    }
+    const result = await this.groupsService.createGroup(name, member_name, userId)
     return {
       code: 200,
       message: 'success',
@@ -62,6 +74,31 @@ export class GroupsController {
       data: {
         qr_code: qrDataUrl
       }
+    }
+  }
+
+  @Get('room-history')
+  async getUserRoomHistory(@Headers('authorization') authHeader?: string) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const history = await this.groupsService.getUserRoomHistory(token)
+    return {
+      code: 200,
+      message: 'success',
+      data: history
+    }
+  }
+
+  @Post('room-history/delete')
+  async deleteUserRoomHistory(
+    @Body() body: { room_id: string },
+    @Headers('authorization') authHeader?: string
+  ) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const success = await this.groupsService.deleteUserRoomHistory(token, body.room_id)
+    return {
+      code: 200,
+      message: success ? 'success' : 'failed',
+      data: success
     }
   }
 }

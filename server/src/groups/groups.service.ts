@@ -9,8 +9,8 @@ export class GroupsService {
   private client = getSupabaseClient()
   private jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
 
-  async createGroup(name: string, memberName: string): Promise<{ group: Group; member: Member }> {
-    const userId = `user_${Date.now()}`
+  async createGroup(name: string, memberName: string, userId: string): Promise<{ group: Group; member: Member }> {
+    // const userId = `user_${Date.now()}` // 改为传入 userId
     const inviteCode = this.generateInviteCode()
 
     // 创建群组
@@ -47,6 +47,16 @@ export class GroupsService {
       throw new Error(`创建成员失败: ${memberError.message}`)
     }
     const member = memberData as Member
+
+    // 记录到用户房间历史
+    await this.client
+      .from('user_rooms')
+      .insert({
+        user_id: userId,
+        group_id: group.id,
+        room_name: name,
+        invite_code: inviteCode
+      })
 
     return { group, member }
   }
@@ -283,6 +293,54 @@ export class GroupsService {
     } catch (error) {
       console.error('生成二维码失败:', error)
       throw new Error('生成二维码失败')
+    }
+  }
+
+  // 获取用户房间历史记录
+  async getUserRoomHistory(token: string): Promise<any[]> {
+    try {
+      const decoded = jwt.verify(token, this.jwtSecret) as any
+      const userId = decoded.userId
+
+      const { data, error } = await this.client
+        .from('user_rooms')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('获取房间历史失败:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('获取房间历史失败:', error)
+      return []
+    }
+  }
+
+  // 删除房间历史记录
+  async deleteUserRoomHistory(token: string, roomId: string): Promise<boolean> {
+    try {
+      const decoded = jwt.verify(token, this.jwtSecret) as any
+      const userId = decoded.userId
+
+      const { error } = await this.client
+        .from('user_rooms')
+        .delete()
+        .eq('id', roomId)
+        .eq('user_id', userId)
+
+      if (error) {
+        console.error('删除房间历史失败:', error)
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('删除房间历史失败:', error)
+      return false
     }
   }
 }

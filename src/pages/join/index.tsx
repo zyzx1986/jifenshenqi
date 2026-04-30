@@ -18,6 +18,7 @@ const JoinPage = () => {
   const [memberName, setMemberName] = useState('')
   const [loading, setLoading] = useState(false)
   const [showQRCode, setShowQRCode] = useState(false)
+  const [userId, setUserId] = useState('')
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [currentGroup, setCurrentGroupLocal] = useState<any>(null)
   const [autoJoinLoading, setAutoJoinLoading] = useState(false)
@@ -77,8 +78,16 @@ const JoinPage = () => {
     })
   }
 
-  // 页面加载时获取微信昵称
+  // 页面加载时获取微信昵称和初始化用户ID
   useEffect(() => {
+    // 初始化或获取用户ID
+    let storedUserId = Taro.getStorageSync('userId')
+    if (!storedUserId) {
+      storedUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      Taro.setStorageSync('userId', storedUserId)
+    }
+    setUserId(storedUserId)
+
     // 页面加载时尝试获取昵称
     const cachedNickname = Taro.getStorageSync('wechatNickname')
     if (cachedNickname) {
@@ -119,7 +128,8 @@ const JoinPage = () => {
         method: 'POST',
         data: {
           name: groupName,
-          member_name: memberName
+          member_name: memberName,
+          user_id: userId
         }
       })
 
