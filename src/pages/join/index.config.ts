@@ -1,3 +1,3 @@
 export default typeof definePageConfig === 'function'
-  ? definePageConfig({ navigationBarTitleText: '加入/创建群组' })
-  : { navigationBarTitleText: '加入/创建群组' }
+  ? definePageConfig({ navigationBarTitleText: '加入/创建房间' })
+  : { navigationBarTitleText: '加入/创建房间' }
