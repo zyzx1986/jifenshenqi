@@ -38,7 +38,7 @@ const JoinPage = () => {
         // 优先使用 getUserProfile（新API）
         if (wx.getUserProfile) {
           wx.getUserProfile({
-            desc: '用于快速加入群组或创建群组',
+            desc: '用于快速加入房间或开放',
             success: (userRes) => {
               const nickname = userRes.userInfo?.nickName || ''
               if (nickname) {
@@ -93,10 +93,10 @@ const JoinPage = () => {
     }
   }, [])
 
-  // 创建群组
+  // 开放
   const createGroup = async () => {
     if (!groupName.trim()) {
-      showToast({ title: '请输入群组名称', icon: 'none' })
+      showToast({ title: '请输入房间名称', icon: 'none' })
       return
     }
 
@@ -123,7 +123,7 @@ const JoinPage = () => {
         }
       })
 
-      console.log('创建群组响应:', res.data)
+      console.log('开放响应:', res.data)
 
       const responseData = res.data?.data || res.data
       const group = responseData?.group
@@ -166,17 +166,17 @@ const JoinPage = () => {
         showToast({ title: '创建失败，返回数据异常', icon: 'none' })
       }
     } catch (error) {
-      console.error('创建群组失败:', error)
+      console.error('开放失败:', error)
       showToast({ title: '创建失败，请稍后重试', icon: 'none' })
     } finally {
       setLoading(false)
     }
   }
 
-  // 加入群组
+  // 加入房间
   const joinGroup = async () => {
     if (!inviteCode.trim()) {
-      showToast({ title: '请输入邀请码', icon: 'none' })
+      showToast({ title: '请输入房号', icon: 'none' })
       return
     }
 
@@ -203,7 +203,7 @@ const JoinPage = () => {
         }
       })
 
-      console.log('加入群组响应:', res.data)
+      console.log('加入房间响应:', res.data)
 
       const responseData = res.data?.data || res.data
       const group = responseData?.group
@@ -217,10 +217,10 @@ const JoinPage = () => {
           switchTab({ url: '/pages/index/index' })
         }, 500)
       } else {
-        showToast({ title: '加入失败，请检查邀请码', icon: 'none' })
+        showToast({ title: '加入失败，请检查房号', icon: 'none' })
       }
     } catch (error: any) {
-      console.error('加入群组失败:', error)
+      console.error('加入房间失败:', error)
       const errorMsg = error?.errMsg || error?.message || ''
       if (errorMsg.includes('已经是成员')) {
         showToast({ title: '您已经是该群组成员', icon: 'none' })
@@ -228,7 +228,7 @@ const JoinPage = () => {
           switchTab({ url: '/pages/index/index' })
         }, 1000)
       } else {
-        showToast({ title: '加入失败，请检查邀请码', icon: 'none' })
+        showToast({ title: '加入失败，请检查房号', icon: 'none' })
       }
     } finally {
       setLoading(false)
@@ -238,7 +238,7 @@ const JoinPage = () => {
   // 一键快速加入（使用微信昵称）
   const quickJoin = async () => {
     if (!inviteCode.trim()) {
-      showToast({ title: '邀请码无效', icon: 'none' })
+      showToast({ title: '房号无效', icon: 'none' })
       return
     }
 
@@ -248,7 +248,7 @@ const JoinPage = () => {
     const nickname = await new Promise<string>((resolve) => {
       if (typeof wx !== 'undefined' && wx.getUserProfile) {
         wx.getUserProfile({
-          desc: '用于快速加入群组',
+          desc: '用于快速加入房间',
           success: (res) => {
             const nick = res.userInfo?.nickName || ''
             if (nick) {
@@ -297,7 +297,7 @@ const JoinPage = () => {
           switchTab({ url: '/pages/index/index' })
         }, 500)
       } else {
-        showToast({ title: '加入失败，请检查邀请码', icon: 'none' })
+        showToast({ title: '加入失败，请检查房号', icon: 'none' })
       }
     } catch (error: any) {
       console.error('快速加入失败:', error)
@@ -308,7 +308,7 @@ const JoinPage = () => {
           switchTab({ url: '/pages/index/index' })
         }, 1000)
       } else {
-        showToast({ title: '加入失败，请检查邀请码', icon: 'none' })
+        showToast({ title: '加入失败，请检查房号', icon: 'none' })
       }
     } finally {
       setAutoJoinLoading(false)
@@ -333,7 +333,7 @@ const JoinPage = () => {
       setInviteCode(code)
       setActiveTab('join')
       setShowAutoJoin(true) // 显示一键加入按钮
-      console.log('检测到邀请码:', code)
+      console.log('检测到房号:', code)
     }
 
     console.log('Join page loaded, params:', params)
@@ -343,7 +343,7 @@ const JoinPage = () => {
   useShareAppMessage(() => {
     const groupToShare = currentGroup || Taro.getStorageSync('currentGroup')
     return {
-      title: `邀请你加入群组「${groupToShare?.name || '积分管理'}」`,
+      title: `邀请你加入房间「${groupToShare?.name || '积分管理'}」`,
       path: `/pages/join/index?invite_code=${groupToShare?.invite_code || ''}`,
       imageUrl: ''
     }
@@ -352,27 +352,27 @@ const JoinPage = () => {
   return (
     <View className="min-h-screen bg-gray-50 px-4 py-6">
       <Text className="block text-lg font-semibold text-gray-900 mb-6">
-        加入/创建群组
+        加入/开放
       </Text>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'join' | 'create')}>
         <TabsList className="grid w-full grid-cols-2 mb-4">
-          <TabsTrigger value="join">加入群组</TabsTrigger>
-          <TabsTrigger value="create">创建群组</TabsTrigger>
+          <TabsTrigger value="join">加入房间</TabsTrigger>
+          <TabsTrigger value="create">开放</TabsTrigger>
         </TabsList>
 
         <TabsContent value="join">
           <Card className="bg-white">
             <CardHeader>
-              <CardTitle className="text-base">加入群组</CardTitle>
+              <CardTitle className="text-base">加入房间</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <View>
-                <Label>邀请码</Label>
+                <Label>房号</Label>
                 <View className="bg-gray-50 rounded-xl px-4 py-3 mt-1">
                   <Input
                     className="w-full bg-transparent"
-                    placeholder="请输入邀请码"
+                    placeholder="请输入房号"
                     value={inviteCode}
                     onInput={(e) => setInviteCode(e.detail.value.toUpperCase())}
                     maxlength={6}
@@ -424,15 +424,15 @@ const JoinPage = () => {
         <TabsContent value="create">
           <Card className="bg-white">
             <CardHeader>
-              <CardTitle className="text-base">创建群组</CardTitle>
+              <CardTitle className="text-base">开放</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <View>
-                <Label>群组名称</Label>
+                <Label>房间名称</Label>
                 <View className="bg-gray-50 rounded-xl px-4 py-3 mt-1">
                   <Input
                     className="w-full bg-transparent"
-                    placeholder="请输入群组名称"
+                    placeholder="请输入房间名称"
                     value={groupName}
                     onInput={(e) => setGroupName(e.detail.value)}
                     maxlength={50}
@@ -477,7 +477,7 @@ const JoinPage = () => {
           >
             <View className="text-center mb-6">
               <Text className="block text-lg font-semibold text-gray-900 mb-2">
-                群组创建成功
+                房间创建成功
               </Text>
               <Text className="block text-sm text-gray-500 mb-4">
                 分享给好友邀请加入
@@ -498,7 +498,7 @@ const JoinPage = () => {
               )}
 
               <View className="bg-gray-50 rounded-lg p-3 mb-2">
-                <Text className="block text-xs text-gray-500 mb-1">邀请码</Text>
+                <Text className="block text-xs text-gray-500 mb-1">房号</Text>
                 <Text className="block text-lg font-bold text-gray-900">
                   {currentGroup?.invite_code}
                 </Text>
