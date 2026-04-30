@@ -1,6 +1,6 @@
 import { View, Text, Image } from '@tarojs/components'
-import Taro, { useLoad, showToast, switchTab, useShareAppMessage } from '@tarojs/taro'
-import { useState } from 'react'
+import Taro, { useLoad, showToast, switchTab, useShareAppMessage, getUserProfile } from '@tarojs/taro'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { ShareButton } from '@/components/ui/share-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,6 +20,58 @@ const JoinPage = () => {
   const [showQRCode, setShowQRCode] = useState(false)
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [currentGroup, setCurrentGroupLocal] = useState<any>(null)
+  const [autoJoinLoading, setAutoJoinLoading] = useState(false)
+  const [showAutoJoin, setShowAutoJoin] = useState(false)
+
+  // 获取微信昵称作为默认昵称
+  const fetchWechatNickname = () => {
+    return new Promise<string>((resolve) => {
+      // 尝试从本地存储获取缓存的昵称
+      const cachedNickname = Taro.getStorageSync('wechatNickname')
+      if (cachedNickname) {
+        resolve(cachedNickname)
+        return
+      }
+
+      // 如果有邀请码且还没获取昵称，弹窗询问
+      if (inviteCode && !memberName) {
+        Taro.showModal({
+          title: '获取昵称',
+          content: '是否使用您的微信昵称快速加入群组？',
+          confirmText: '使用昵称',
+          cancelText: '手动输入',
+          success: (res) => {
+            if (res.confirm) {
+              // 获取微信昵称
+              if (typeof wx !== 'undefined' && wx.getUserProfile) {
+                wx.getUserProfile({
+                  desc: '用于快速加入群组',
+                  success: (userRes) => {
+                    const nickname = userRes.userInfo?.nickName || ''
+                    if (nickname) {
+                      Taro.setStorageSync('wechatNickname', nickname)
+                      resolve(nickname)
+                    } else {
+                      resolve('')
+                    }
+                  },
+                  fail: () => {
+                    resolve('')
+                  }
+                })
+              } else {
+                resolve('')
+              }
+            } else {
+              resolve('')
+            }
+          }
+        })
+      } else {
+        resolve('')
+      }
+    })
+  }
 
   // 创建群组
   const createGroup = async () => {
@@ -133,11 +185,99 @@ const JoinPage = () => {
       } else {
         showToast({ title: '加入失败，请检查邀请码', icon: 'none' })
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('加入群组失败:', error)
-      showToast({ title: '加入失败，请检查邀请码', icon: 'none' })
+      const errorMsg = error?.errMsg || error?.message || ''
+      if (errorMsg.includes('已经是成员')) {
+        showToast({ title: '您已经是该群组成员', icon: 'none' })
+        setTimeout(() => {
+          switchTab({ url: '/pages/index/index' })
+        }, 1000)
+      } else {
+        showToast({ title: '加入失败，请检查邀请码', icon: 'none' })
+      }
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 一键快速加入（使用微信昵称）
+  const quickJoin = async () => {
+    if (!inviteCode.trim()) {
+      showToast({ title: '邀请码无效', icon: 'none' })
+      return
+    }
+
+    setAutoJoinLoading(true)
+
+    // 先获取微信昵称
+    const nickname = await new Promise<string>((resolve) => {
+      if (typeof wx !== 'undefined' && wx.getUserProfile) {
+        wx.getUserProfile({
+          desc: '用于快速加入群组',
+          success: (res) => {
+            const nick = res.userInfo?.nickName || ''
+            if (nick) {
+              Taro.setStorageSync('wechatNickname', nick)
+            }
+            resolve(nick)
+          },
+          fail: () => {
+            resolve('')
+          }
+        })
+      } else {
+        resolve('')
+      }
+    })
+
+    if (!nickname) {
+      setAutoJoinLoading(false)
+      showToast({ title: '请授权获取昵称', icon: 'none' })
+      return
+    }
+
+    setMemberName(nickname)
+
+    try {
+      const res = await Network.request({
+        url: '/api/groups/join',
+        method: 'POST',
+        data: {
+          invite_code: inviteCode,
+          member_name: nickname
+        }
+      })
+
+      console.log('快速加入响应:', res.data)
+
+      const responseData = res.data?.data || res.data
+      const group = responseData?.group
+      const member = responseData?.member
+
+      if (group && member) {
+        setCurrentGroup(group)
+        setCurrentMember(member)
+        showToast({ title: '加入成功', icon: 'success' })
+        setTimeout(() => {
+          switchTab({ url: '/pages/index/index' })
+        }, 500)
+      } else {
+        showToast({ title: '加入失败，请检查邀请码', icon: 'none' })
+      }
+    } catch (error: any) {
+      console.error('快速加入失败:', error)
+      const errorMsg = error?.errMsg || error?.message || ''
+      if (errorMsg.includes('已经是成员')) {
+        showToast({ title: '您已经是该群组成员', icon: 'none' })
+        setTimeout(() => {
+          switchTab({ url: '/pages/index/index' })
+        }, 1000)
+      } else {
+        showToast({ title: '加入失败，请检查邀请码', icon: 'none' })
+      }
+    } finally {
+      setAutoJoinLoading(false)
     }
   }
 
@@ -155,12 +295,11 @@ const JoinPage = () => {
     const params = instance.router?.params || {}
 
     if (params.invite_code) {
-      setInviteCode(params.invite_code.toUpperCase())
+      const code = params.invite_code.toUpperCase()
+      setInviteCode(code)
       setActiveTab('join')
-      showToast({
-        title: '已自动填写邀请码',
-        icon: 'none'
-      })
+      setShowAutoJoin(true) // 显示一键加入按钮
+      console.log('检测到邀请码:', code)
     }
 
     console.log('Join page loaded, params:', params)
@@ -205,6 +344,23 @@ const JoinPage = () => {
                     maxlength={6}
                   />
                 </View>
+              </View>
+
+              {/* 快速加入按钮（从分享链接进入时显示） */}
+              {showAutoJoin && inviteCode && (
+                <Button
+                  className="w-full bg-green-500 hover:bg-green-600"
+                  onClick={quickJoin}
+                  disabled={autoJoinLoading}
+                >
+                  {autoJoinLoading ? '正在加入...' : '一键使用微信昵称加入'}
+                </Button>
+              )}
+
+              <View className="flex items-center">
+                <View className="flex-1 h-px bg-gray-200" />
+                <Text className="block text-xs text-gray-400 px-4">或</Text>
+                <View className="flex-1 h-px bg-gray-200" />
               </View>
 
               <View>
@@ -287,10 +443,10 @@ const JoinPage = () => {
           >
             <View className="text-center mb-6">
               <Text className="block text-lg font-semibold text-gray-900 mb-2">
-                群组二维码
+                群组创建成功
               </Text>
               <Text className="block text-sm text-gray-500 mb-4">
-                扫码即可加入群组
+                分享给好友邀请加入
               </Text>
 
               {qrCodeUrl ? (
