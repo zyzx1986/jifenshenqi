@@ -1,7 +1,7 @@
 export default defineAppConfig({
   pages: [
-    'pages/login/index',
     'pages/index/index',
+    'pages/login/index',
     'pages/ranking/index',
     'pages/history/index',
     'pages/profile/index',
