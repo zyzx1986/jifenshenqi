@@ -123,15 +123,17 @@ const JoinPage = () => {
         setMemberName(nickname)
       }
 
-      const res = await Network.request({
-        url: '/api/groups/create',
-        method: 'POST',
-        data: {
-          name: groupName,
-          member_name: memberName,
-          user_id: userId
-        }
-      })
+        const token = Taro.getStorageSync('token')
+        const res = await Network.request({
+          url: '/api/groups/create',
+          method: 'POST',
+          data: {
+            name: groupName,
+            member_name: memberName,
+            user_id: userId
+          },
+          header: token ? { Authorization: `Bearer ${token}` } : {}
+        })
 
       console.log('开房响应:', res.data)
 
@@ -151,6 +153,7 @@ const JoinPage = () => {
 
         // 保存到开房历史记录
         try {
+          const token = Taro.getStorageSync('token')
           await Network.request({
             url: '/api/groups/save-history',
             method: 'POST',
@@ -158,7 +161,8 @@ const JoinPage = () => {
               room_name: group.name,
               invite_code: group.invite_code,
               user_id: userId
-            }
+            },
+            header: token ? { Authorization: `Bearer ${token}` } : {}
           })
           console.log('开房历史记录已保存')
         } catch (historyError) {
@@ -220,13 +224,15 @@ const JoinPage = () => {
         setMemberName(nickname)
       }
 
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/groups/join',
         method: 'POST',
         data: {
           invite_code: inviteCode,
           member_name: memberName
-        }
+        },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
 
       console.log('加入房间响应:', res.data)
@@ -300,13 +306,15 @@ const JoinPage = () => {
     setMemberName(nickname)
 
     try {
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/groups/join',
         method: 'POST',
         data: {
           invite_code: inviteCode,
           member_name: nickname
-        }
+        },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
 
       console.log('快速加入响应:', res.data)

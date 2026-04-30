@@ -31,10 +31,12 @@ const IndexPage = () => {
 
     setLoading(true)
     try {
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/groups/members',
         method: 'GET',
-        data: { group_id: currentGroup.id }
+        data: { group_id: currentGroup.id },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
 
       console.log('加载成员列表:', res.data)
@@ -69,6 +71,7 @@ const IndexPage = () => {
     if (!currentGroup || !currentMember) return
 
     try {
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/points/give',
         method: 'POST',
@@ -78,7 +81,8 @@ const IndexPage = () => {
           to_member_id: toMemberId,
           points: pointsNum,
           reason: reasonText
-        }
+        },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
 
       console.log('给分结果:', res.data)

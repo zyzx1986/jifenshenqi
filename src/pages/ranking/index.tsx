@@ -24,10 +24,12 @@ const RankingPage = () => {
 
     setLoading(true)
     try {
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/groups/members',
         method: 'GET',
-        data: { group_id: currentGroup.id }
+        data: { group_id: currentGroup.id },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
 
       console.log('加载成员列表:', res.data)

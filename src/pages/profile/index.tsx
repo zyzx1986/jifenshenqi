@@ -22,13 +22,15 @@ const ProfilePage = () => {
     if (!currentMember) return
 
     try {
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/members/update',
         method: 'POST',
         data: {
           member_id: currentMember.id,
           name
-        }
+        },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
 
       console.log('更新昵称结果:', res.data)

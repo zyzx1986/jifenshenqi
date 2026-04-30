@@ -26,8 +26,10 @@ export default function RoomHistory() {
   const fetchHistory = async () => {
     try {
       setLoading(true)
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
-        url: '/api/groups/room-history'
+        url: '/api/groups/room-history',
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
       console.log('获取开房历史:', res.data)
       if (res.data.code === 200) {
@@ -44,10 +46,12 @@ export default function RoomHistory() {
   const handleDelete = async (roomId: string) => {
     try {
       setDeletingId(roomId)
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/groups/room-history/delete',
         method: 'POST',
-        data: { room_id: roomId }
+        data: { room_id: roomId },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
       if (res.data.code === 200) {
         setHistory(history.filter(item => item.id !== roomId))
@@ -65,8 +69,10 @@ export default function RoomHistory() {
     // 先检查是否已经是该房间成员
     try {
       Taro.showLoading({ title: '检查中...' })
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
-        url: '/api/groups/my-group'
+        url: '/api/groups/my-group',
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
       Taro.hideLoading()
       

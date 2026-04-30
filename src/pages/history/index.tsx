@@ -17,10 +17,12 @@ const HistoryPage = () => {
 
     setLoading(true)
     try {
+      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/points/history',
         method: 'GET',
-        data: { group_id: currentGroup.id }
+        data: { group_id: currentGroup.id },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
       })
 
       console.log('加载积分记录:', res.data)
