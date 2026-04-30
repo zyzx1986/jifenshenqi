@@ -77,6 +77,20 @@ export class GroupsController {
     }
   }
 
+  @Post('save-history')
+  async saveUserRoomHistory(
+    @Body() body: { room_name: string; invite_code: string; user_id: string },
+    @Headers('authorization') authHeader?: string
+  ) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const success = await this.groupsService.saveUserRoomHistory(token, body)
+    return {
+      code: 200,
+      message: success ? 'success' : 'failed',
+      data: success
+    }
+  }
+
   @Get('room-history')
   async getUserRoomHistory(@Headers('authorization') authHeader?: string) {
     const token = authHeader?.replace('Bearer ', '') || ''

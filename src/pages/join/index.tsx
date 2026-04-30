@@ -149,6 +149,22 @@ const JoinPage = () => {
         // 保存到本地存储，用于分享配置
         Taro.setStorageSync('currentGroup', group)
 
+        // 保存到开房历史记录
+        try {
+          await Network.request({
+            url: '/api/groups/save-history',
+            method: 'POST',
+            data: {
+              room_name: group.name,
+              invite_code: group.invite_code,
+              user_id: userId
+            }
+          })
+          console.log('开房历史记录已保存')
+        } catch (historyError) {
+          console.error('保存开房历史失败:', historyError)
+        }
+
         // 获取二维码
         try {
           const qrRes = await Network.request({

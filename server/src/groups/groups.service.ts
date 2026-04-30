@@ -227,6 +227,54 @@ export class GroupsService {
     })) as PointsRecord[]
   }
 
+  // 保存开房历史记录
+  async saveUserRoomHistory(token: string, data: { room_name: string; invite_code: string; user_id: string }): Promise<boolean> {
+    try {
+      // 获取用户ID
+      let userId = data.user_id
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, this.jwtSecret) as { userId: string }
+          userId = decoded.userId
+        } catch (e) {
+          // 使用传入的 user_id
+        }
+      }
+
+      // 查询房间ID
+      const { data: groupData, error: groupError } = await this.client
+        .from('groups')
+        .select('id')
+        .eq('invite_code', data.invite_code)
+        .single()
+
+      if (groupError || !groupData) {
+        console.error('查询房间失败:', groupError)
+        return false
+      }
+
+      // 插入历史记录
+      const { error: insertError } = await this.client
+        .from('user_rooms')
+        .insert({
+          user_id: userId,
+          group_id: groupData.id,
+          room_name: data.room_name,
+          invite_code: data.invite_code
+        })
+
+      if (insertError) {
+        console.error('保存开房历史失败:', insertError)
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('保存开房历史异常:', error)
+      return false
+    }
+  }
+
   private generateInviteCode(): string {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
     let code = ''
