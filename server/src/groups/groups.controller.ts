@@ -91,6 +91,20 @@ export class GroupsController {
     }
   }
 
+  @Get('session')
+  async getCurrentSession(
+    @Query('inviteCode') inviteCode: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const session = await this.groupsService.getCurrentSession(token, inviteCode)
+    return {
+      code: 200,
+      message: 'success',
+      data: session
+    }
+  }
+
   @Get('room-history')
   async getUserRoomHistory(@Headers('authorization') authHeader?: string) {
     const token = authHeader?.replace('Bearer ', '') || ''

@@ -276,11 +276,8 @@ export class GroupsService {
   }
 
   private generateInviteCode(): string {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-    let code = ''
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
+    // 生成6位纯数字房号
+    const code = Math.floor(100000 + Math.random() * 900000).toString()
     return code
   }
 
@@ -449,6 +446,29 @@ export class GroupsService {
 
   // 获取当前对局状态
   async getCurrentGameSession(token: string, inviteCode: string) {
+    try {
+      const { data } = await supabase
+        .from('game_sessions')
+        .select('*')
+        .eq('invite_code', inviteCode)
+        .eq('status', 'playing')
+        .single()
+
+      if (!data) return null
+
+      return {
+        ...data,
+        participants: JSON.parse(data.participants || '[]'),
+        rounds: JSON.parse(data.rounds || '[]')
+      }
+    } catch (error) {
+      console.error('获取当前对局失败:', error)
+      return null
+    }
+  }
+
+  // 通过房号获取当前对局（无需认证）
+  async getCurrentSession(token: string, inviteCode: string) {
     try {
       const { data } = await supabase
         .from('game_sessions')
