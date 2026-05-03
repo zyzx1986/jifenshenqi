@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ShareButton } from '@/components/ui/share-button'
+import { Network } from '@/network'
 import { 
   Trophy, Users, Clock, ArrowLeft, Gift, Crown, RefreshCw
 } from 'lucide-react-taro'
