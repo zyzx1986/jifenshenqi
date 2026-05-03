@@ -157,20 +157,32 @@ export class GroupsService {
     points: number,
     reason: string
   ): Promise<Member[]> {
-    // 先获取当前积分
-    const { data: currentMember, error: fetchError } = await this.client
+    // 获取发送者和接收者的当前积分
+    const { data: membersData, error: fetchError } = await this.client
       .from('members')
-      .select('total_points')
-      .eq('id', toMemberId)
-      .single()
+      .select('id, total_points, total_given')
+      .in('id', [fromMemberId, toMemberId])
 
     if (fetchError) {
       console.error('查询成员失败:', fetchError)
       throw new Error(`查询成员失败: ${fetchError.message}`)
     }
 
-    const currentPoints = (currentMember as any).total_points || 0
-    const newPoints = currentPoints + points
+    const fromMember = membersData?.find((m: any) => m.id === fromMemberId)
+    const toMember = membersData?.find((m: any) => m.id === toMemberId)
+
+    if (!fromMember || !toMember) {
+      throw new Error('成员不存在')
+    }
+
+    const fromPoints = (fromMember as any).total_points || 0
+    const fromGiven = (fromMember as any).total_given || 0
+    const toPoints = (toMember as any).total_points || 0
+
+    // 检查发送者积分是否足够
+    if (fromPoints < points) {
+      throw new Error(`积分不足，你的积分为 ${fromPoints}`)
+    }
 
     // 创建积分记录
     const { error: recordError } = await this.client
@@ -188,15 +200,32 @@ export class GroupsService {
       throw new Error(`创建积分记录失败: ${recordError.message}`)
     }
 
-    // 更新接收者积分
-    const { error: updateError } = await this.client
+    // 更新接收者积分 (增加)
+    const { error: updateToError } = await this.client
       .from('members')
-      .update({ total_points: newPoints })
+      .update({ 
+        total_points: toPoints + points,
+        total_received: (toMember as any).total_received + points || points
+      })
       .eq('id', toMemberId)
 
-    if (updateError) {
-      console.error('更新积分失败:', updateError)
-      throw new Error(`更新积分失败: ${updateError.message}`)
+    if (updateToError) {
+      console.error('更新接收者积分失败:', updateToError)
+      throw new Error(`更新接收者积分失败: ${updateToError.message}`)
+    }
+
+    // 更新发送者积分 (扣减)
+    const { error: updateFromError } = await this.client
+      .from('members')
+      .update({ 
+        total_points: fromPoints - points,
+        total_given: fromGiven + points
+      })
+      .eq('id', fromMemberId)
+
+    if (updateFromError) {
+      console.error('更新发送者积分失败:', updateFromError)
+      throw new Error(`更新发送者积分失败: ${updateFromError.message}`)
     }
 
     // 返回更新后的所有成员
