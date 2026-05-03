@@ -39,7 +39,8 @@ export default function Index() {
 
   // 加载成员列表
   const loadMembers = async () => {
-    if (!currentGroup) return
+    const savedGroup = Taro.getStorageSync('currentGroup')
+    if (!savedGroup) return
     
     try {
       const token = Taro.getStorageSync('token')
