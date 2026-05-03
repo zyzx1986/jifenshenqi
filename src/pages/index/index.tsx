@@ -71,10 +71,22 @@ export default function Index() {
 
   // 页面显示时检查是否需要恢复对局和加载成员
   useDidShow(() => {
-    // 如果有当前房间，先加载成员列表
-    if (currentGroup) {
+    // 先从本地存储获取房间信息
+    const savedGroup = Taro.getStorageSync('currentGroup')
+    const savedMemberId = Taro.getStorageSync('currentMemberId')
+    
+    // 如果有保存的房间信息，加载成员列表
+    if (savedGroup) {
+      if (!currentGroup) {
+        setCurrentGroup(savedGroup)
+      }
       loadMembers()
     }
+    
+    if (savedMemberId && !currentMemberId) {
+      setCurrentMemberId(savedMemberId)
+    }
+    
     checkRecovery()
   })
 
