@@ -229,7 +229,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       
       const { data: members } = await this.supabase
         .from('members')
-        .select('id, name, points, user_id, is_host')
+        .select('id, name, total_points, user_id, is_host')
         .eq('group_id', group.id);
       
       return members || [];

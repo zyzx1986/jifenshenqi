@@ -269,10 +269,11 @@ export default function Index() {
         url: '/api/points/give',
         method: 'POST',
         data: {
-          groupId: currentGroup.id,
-          fromMemberId: currentMember?.id,
-          toMemberId: selectedMember.id,
-          points: Number(points) || 0
+          group_id: currentGroup.id,
+          from_member_id: currentMember?.id,
+          to_member_id: selectedMember.id,
+          points: Number(points) || 0,
+          reason: ''
         },
         header: token ? { Authorization: `Bearer ${token}` } : {}
       })

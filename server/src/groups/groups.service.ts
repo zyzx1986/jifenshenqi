@@ -156,7 +156,7 @@ export class GroupsService {
     toMemberId: string,
     points: number,
     reason: string
-  ): Promise<void> {
+  ): Promise<Member[]> {
     // 先获取当前积分
     const { data: currentMember, error: fetchError } = await this.client
       .from('members')
@@ -198,6 +198,14 @@ export class GroupsService {
       console.error('更新积分失败:', updateError)
       throw new Error(`更新积分失败: ${updateError.message}`)
     }
+
+    // 返回更新后的所有成员
+    const { data: members } = await this.client
+      .from('members')
+      .select('*')
+      .eq('group_id', groupId)
+
+    return (members || []) as Member[]
   }
 
   async getPointsHistory(groupId: string): Promise<PointsRecord[]> {

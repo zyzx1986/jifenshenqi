@@ -249,7 +249,7 @@ export class PointsController {
       reason: string
     }
   ) {
-    await this.groupsService.givePoints(
+    const members = await this.groupsService.givePoints(
       body.group_id,
       body.from_member_id,
       body.to_member_id,
@@ -259,7 +259,7 @@ export class PointsController {
     return {
       code: 200,
       message: 'success',
-      data: null
+      data: { members }
     }
   }
 
