@@ -78,6 +78,37 @@ const JoinPage = () => {
     })
   }
 
+  // 获取页面路径参数（分享链接带来的invite_code）
+  useEffect(() => {
+    const app = Taro.getApp()
+    if (app && (app as any).onAppRoute) {
+      (app as any).onAppRoute((route: string) => {
+        if (route.includes('join')) {
+          // 延迟获取参数，确保参数已经传递
+          setTimeout(() => {
+            const pages = Taro.getCurrentPages()
+            const currentPage = pages[pages.length - 1]
+            if (currentPage) {
+              const options = (currentPage as any).options || (currentPage as any).$taroOptions || {}
+              console.log('页面参数:', options)
+              if (options.invite_code && options.invite_code !== 'undefined') {
+                setInviteCode(options.invite_code)
+                setActiveTab('join')
+                // 自动触发加入
+                if (memberName) {
+                  handleJoinGroup(options.invite_code)
+                } else {
+                  // 等昵称获取后自动加入
+                  setShowAutoJoin(true)
+                }
+              }
+            }
+          }, 500)
+        }
+      })
+    }
+  }, [memberName])
+
   // 页面加载时获取微信昵称和初始化用户ID
   useEffect(() => {
     // 初始化或获取用户ID
@@ -100,6 +131,27 @@ const JoinPage = () => {
         }
       })
     }
+    
+    // 立即检查分享参数
+    setTimeout(() => {
+      const pages = Taro.getCurrentPages()
+      const currentPage = pages[pages.length - 1]
+      if (currentPage) {
+        const options = (currentPage as any).options || {}
+        if (options.invite_code && options.invite_code !== 'undefined') {
+          setInviteCode(options.invite_code)
+          setActiveTab('join')
+          // 如果昵称已有，直接加入
+          const cachedNickname = Taro.getStorageSync('wechatNickname')
+          if (cachedNickname) {
+            setMemberName(cachedNickname)
+            setTimeout(() => handleJoinGroup(options.invite_code), 300)
+          } else {
+            setShowAutoJoin(true)
+          }
+        }
+      }
+    }, 100)
   }, [])
 
   // 开房
@@ -376,9 +428,11 @@ const JoinPage = () => {
   // 配置分享信息
   useShareAppMessage(() => {
     const groupToShare = currentGroup || Taro.getStorageSync('currentGroup')
+    // 同时传递 invite_code（小程序路由参数）和 inviteCode（前端解析用）
+    const inviteCode = groupToShare?.invite_code || groupToShare?.inviteCode || ''
     return {
       title: `邀请你加入房间「${groupToShare?.name || '积分管理'}」`,
-      path: `/pages/join/index?invite_code=${groupToShare?.invite_code || ''}`,
+      path: `/pages/join/index?invite_code=${inviteCode}`,
       imageUrl: ''
     }
   })

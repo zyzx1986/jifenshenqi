@@ -35,8 +35,33 @@ export default function Index() {
   const [showRecovery, setShowRecovery] = useState(false)
   const [recovering, setRecovering] = useState(false)
 
-  // 页面显示时检查是否需要恢复对局
+  // 加载成员列表
+  const loadMembers = async () => {
+    if (!currentGroup) return
+    
+    try {
+      const token = Taro.getStorageSync('token')
+      const res = await Network.request({
+        url: '/api/groups/members',
+        method: 'GET',
+        header: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+      
+      const result = res.data as any
+      if (result.code === 200 && result.data) {
+        setMembers(result.data)
+      }
+    } catch (err) {
+      console.error('加载成员失败:', err)
+    }
+  }
+
+  // 页面显示时检查是否需要恢复对局和加载成员
   useDidShow(() => {
+    // 如果有当前房间，先加载成员列表
+    if (currentGroup) {
+      loadMembers()
+    }
     checkRecovery()
   })
 
@@ -182,29 +207,7 @@ export default function Index() {
     }
   }, [currentGroup, currentMemberId])
 
-  // 加载成员列表
-  const loadMembers = async () => {
-    if (!currentGroup) return
-    
-    setLoading(true)
-    try {
-      const token = Taro.getStorageSync('token')
-      const res = await Taro.request({
-        url: `/api/groups/members?groupId=${currentGroup.id}`,
-        method: 'GET',
-        header: token ? { Authorization: `Bearer ${token}` } : {}
-      })
-      
-      const result = res.data as any
-      if (result.code === 200) {
-        setMembers(result.data)
-      }
-    } catch (err) {
-      console.error('加载成员列表失败:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+
 
   // 初始化加载
   useEffect(() => {
