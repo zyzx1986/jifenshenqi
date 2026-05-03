@@ -203,6 +203,10 @@ const JoinPage = () => {
         setCurrentMember(member)
         setCurrentGroupLocal(group)
 
+        // 同时将创建者添加到成员列表
+        const { setMembers } = useGroupStore.getState()
+        setMembers([member])
+
         // 保存到本地存储，用于分享配置
         Taro.setStorageSync('currentGroup', group)
 

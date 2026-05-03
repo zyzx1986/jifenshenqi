@@ -43,10 +43,12 @@ export default function Index() {
       const res = await Network.request({
         url: '/api/groups/members',
         method: 'GET',
+        data: { group_id: savedGroup.id },
         header: token ? { Authorization: `Bearer ${token}` } : {}
       })
       
       const result = res.data as any
+      console.log('加载成员响应:', result)
       if (result.code === 200 && result.data) {
         setMembers(result.data)
       }
@@ -58,12 +60,17 @@ export default function Index() {
   // 从本地存储恢复房间信息
   useEffect(() => {
     const savedGroup = Taro.getStorageSync('currentGroup')
-    const savedMember = Taro.getStorageSync('currentMember')
+    const savedMember = Taro.getStorageSync('currentMember') as any
     if (savedGroup && !currentGroup) {
       setCurrentGroup(savedGroup)
     }
     if (savedMember && !currentMember) {
       setCurrentMember(savedMember)
+      // 确保当前成员也在成员列表中
+      const existingMembers = useGroupStore.getState().members
+      if (!existingMembers.find((m: any) => m.id === savedMember.id)) {
+        setMembers([savedMember, ...existingMembers])
+      }
     }
   }, [])
 
