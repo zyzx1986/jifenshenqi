@@ -57,6 +57,18 @@ export default function Index() {
     }
   }
 
+  // 从本地存储恢复房间信息
+  useEffect(() => {
+    const savedGroup = Taro.getStorageSync('currentGroup')
+    const savedMemberId = Taro.getStorageSync('currentMemberId')
+    if (savedGroup && !currentGroup) {
+      setCurrentGroup(savedGroup)
+    }
+    if (savedMemberId && !currentMemberId) {
+      setCurrentMemberId(savedMemberId)
+    }
+  }, [])
+
   // 页面显示时检查是否需要恢复对局和加载成员
   useDidShow(() => {
     // 如果有当前房间，先加载成员列表
