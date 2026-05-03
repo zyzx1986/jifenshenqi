@@ -544,19 +544,21 @@ export class GroupsService {
 
       // 更新成员的累计积分
       for (const p of data.participants) {
-        await this.client.rpc('update_member_total', {
-          p_member_id: p.member_id,
-          p_points: p.score
-        }).catch(() => {
+        try {
+          await this.client.rpc('update_member_total', {
+            p_member_id: p.member_id,
+            p_points: p.score
+          })
+        } catch {
           // 如果存储过程不存在，手动更新
-          this.client
+          await this.client
             .from('members')
             .update({
               total_points: (p.score || 0),
               updated_at: new Date().toISOString()
             })
             .eq('id', p.member_id)
-        })
+        }
       }
 
       return history
@@ -646,7 +648,7 @@ export class GroupsService {
       const rankings = [...participants].sort((a, b) => b.total_score - a.total_score)
 
       // 生成趣味数据
-      const funFacts = []
+      const funFacts: string[] = []
       if (rankings.length > 0) {
         const topPlayer = rankings[0]
         funFacts.push(`${topPlayer.name}是今晚的大赢家，总积分${topPlayer.total_score > 0 ? '+' : ''}${topPlayer.total_score}分`)
