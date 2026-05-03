@@ -26,6 +26,7 @@ const JoinPage = () => {
   const [currentGroup, setCurrentGroupLocal] = useState<any>(null)
   const [autoJoinLoading, setAutoJoinLoading] = useState(false)
   const [showAutoJoin, setShowAutoJoin] = useState(false)
+  const [hasAutoJoined, setHasAutoJoined] = useState(false)
 
   // 获取微信昵称作为默认昵称
   const fetchWechatNickname = async () => {
@@ -431,6 +432,14 @@ const JoinPage = () => {
 
     console.log('Join page loaded, params:', params)
   })
+
+  // 自动加入房间逻辑
+  useEffect(() => {
+    if (showAutoJoin && inviteCode && !hasAutoJoined && !autoJoinLoading) {
+      setHasAutoJoined(true) // 标记已触发自动加入
+      quickJoin()
+    }
+  }, [showAutoJoin, inviteCode])
 
   // 配置分享信息
   useShareAppMessage(() => {
