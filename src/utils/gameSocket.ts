@@ -1,5 +1,4 @@
 import Taro from '@tarojs/taro'
-import { useGroupStore } from '@/stores/group'
 
 // WebSocket 连接管理
 class GameSocket {
@@ -9,7 +8,7 @@ class GameSocket {
   private memberId = ''
   private memberName = ''
   private userId = ''
-  private reconnectTimer: number | null = null
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private messageHandlers: Map<string, Function[]> = new Map()
 
   // 获取 WebSocket URL
@@ -17,8 +16,8 @@ class GameSocket {
     // 在开发环境和生产环境使用不同的 URL
     const env = Taro.getEnv()
     if (env === Taro.ENV_TYPE.WEAPP || env === Taro.ENV_TYPE.TT) {
-      // 小程序环境使用 wss
-      return `wss://${process.env.PROJECT_DOMAIN || window.location.host}/game`
+      // 小程序环境使用相对路径
+      return `/game`
     }
     // H5 环境
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -93,7 +92,6 @@ class GameSocket {
   // 小程序环境连接
   private connectMiniApp() {
     try {
-      const env = Taro.getEnv()
       let url = this.getWsUrl()
       
       // 小程序环境直接使用相对路径

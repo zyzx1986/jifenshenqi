@@ -1,5 +1,5 @@
 import { View, Text } from '@tarojs/components'
-import { useLoad, useDidShow, showToast, navigateTo, showModal, setClipboardData } from '@tarojs/taro'
+import Taro, { useLoad, useDidShow, showToast, navigateTo, showModal, setClipboardData } from '@tarojs/taro'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -183,7 +183,7 @@ const ProfilePage = () => {
             className="w-full"
             onClick={() => navigateTo({ url: '/pages/room-history/index' })}
           >
-            <History size={18} />
+            <History size={18} color="#666" />
             <Text className="ml-2">查看开房历史</Text>
           </Button>
 
@@ -193,7 +193,7 @@ const ProfilePage = () => {
             className="w-full"
             onClick={() => navigateTo({ url: '/pages/stats/index' })}
           >
-            <ChartBarBig size={18} />
+            <ChartBarBig size={18} color="#666" />
             <Text className="ml-2">战绩统计</Text>
           </Button>
         </View>

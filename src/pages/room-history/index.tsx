@@ -158,10 +158,9 @@ export default function RoomHistory() {
                   <Button 
                     variant="ghost" 
                     className="px-3"
-                    loading={deletingId === room.id}
                     onClick={() => handleDelete(room.id)}
                   >
-                    <Text className="block text-sm text-gray-500">删除</Text>
+                    <Text className="block text-sm text-gray-500">{deletingId === room.id ? '删除中...' : '删除'}</Text>
                   </Button>
                 </View>
               </CardContent>

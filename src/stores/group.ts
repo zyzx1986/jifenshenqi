@@ -1,11 +1,16 @@
+import Taro from '@tarojs/taro'
 import { create } from 'zustand'
 
 interface Member {
   id: string
   name: string
   total_points: number
+  total_given: number
+  total_received: number
+  received_count: number
   group_id: string
   user_id: string
+  isHost?: boolean
 }
 
 interface Group {
@@ -74,42 +79,62 @@ interface GroupState {
   clear: () => void
 }
 
-export const useGroupStore = create<GroupState>((set) => ({
-  currentGroup: null,
-  currentMember: null,
-  members: [],
-  currentGame: null,
-  setCurrentGroup: (group) => set({ currentGroup: group }),
-  setCurrentMember: (member) => set({ currentMember: member }),
-  setMembers: (members) => set({ members }),
-  addMember: (member) => set((state) => ({ members: [...state.members, member] })),
-  updateMember: (memberId, points) =>
-    set((state) => ({
-      members: state.members.map((m) =>
-        m.id === memberId ? { ...m, total_points: m.total_points + points } : m
-      ),
-    })),
-  setCurrentGame: (game) => set({ currentGame: game }),
-  updateGameParticipant: (memberId, score) =>
-    set((state) => {
-      if (!state.currentGame) return state
-      const participants = state.currentGame.participants.map((p) =>
-        p.member_id === memberId ? { ...p, score: (p.score || 0) + score } : p
-      )
-      return { currentGame: { ...state.currentGame, participants } }
-    }),
-  addGameRound: (round) =>
-    set((state) => {
-      if (!state.currentGame) return state
-      return {
-        currentGame: {
-          ...state.currentGame,
-          rounds: [...state.currentGame.rounds, round]
-        }
-      }
-    }),
-  clearGame: () => set({ currentGame: null }),
-  clear: () => set({ currentGroup: null, currentMember: null, members: [], currentGame: null }),
-}))
+export const useGroupStore = create<GroupState>((set) => {
+  // 从本地存储恢复数据
+  const savedGroup = Taro.getStorageSync('currentGroup') || null
+  const savedMember = Taro.getStorageSync('currentMember') || null
 
-export type { Group, Member, PointsRecord, GameSession, Participant, Round }
+  return {
+    currentGroup: savedGroup,
+    currentMember: savedMember,
+    members: [],
+    currentGame: null,
+    setCurrentGroup: (group) => {
+      set({ currentGroup: group })
+      if (group) {
+        Taro.setStorageSync('currentGroup', group)
+      } else {
+        Taro.removeStorageSync('currentGroup')
+      }
+    },
+    setCurrentMember: (member) => {
+      set({ currentMember: member })
+      if (member) {
+        Taro.setStorageSync('currentMember', member)
+      } else {
+        Taro.removeStorageSync('currentMember')
+      }
+    },
+    setMembers: (members) => set({ members }),
+    addMember: (member) => set((state) => ({ members: [...state.members, member] })),
+    updateMember: (memberId, points) =>
+      set((state) => ({
+        members: state.members.map((m) =>
+          m.id === memberId ? { ...m, total_points: m.total_points + points } : m
+        ),
+      })),
+    setCurrentGame: (game) => set({ currentGame: game }),
+    updateGameParticipant: (memberId, score) =>
+      set((state) => {
+        if (!state.currentGame) return state
+        const participants = state.currentGame.participants.map((p) =>
+          p.member_id === memberId ? { ...p, score: (p.score || 0) + score } : p
+        )
+        return { currentGame: { ...state.currentGame, participants } }
+      }),
+    addGameRound: (round) =>
+      set((state) => {
+        if (!state.currentGame) return state
+        return {
+          currentGame: {
+            ...state.currentGame,
+            rounds: [...state.currentGame.rounds, round]
+          }
+        }
+      }),
+    clearGame: () => set({ currentGame: null }),
+    clear: () => set({ currentGroup: null, currentMember: null, members: [], currentGame: null }),
+  }
+})
+
+export type { Group, Member, PointsRecord, GameSession, Participant, Round };

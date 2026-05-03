@@ -1,5 +1,5 @@
 import { View, Text, Image } from '@tarojs/components'
-import Taro, { useLoad, showToast, switchTab, useShareAppMessage, getUserProfile } from '@tarojs/taro'
+import Taro, { useLoad, showToast, switchTab, useShareAppMessage } from '@tarojs/taro'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { ShareButton } from '@/components/ui/share-button'
@@ -9,6 +9,9 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useGroupStore } from '@/stores/group'
 import { Network } from '@/network'
+
+// 微信小程序全局对象
+declare const wx: any
 
 const JoinPage = () => {
   const { setCurrentGroup, setCurrentMember } = useGroupStore()
@@ -25,7 +28,7 @@ const JoinPage = () => {
   const [showAutoJoin, setShowAutoJoin] = useState(false)
 
   // 获取微信昵称作为默认昵称
-  const fetchWechatNickname = async (autoJoin = false) => {
+  const fetchWechatNickname = async () => {
     return new Promise<string>((resolve) => {
       // 尝试从本地存储获取缓存的昵称
       const cachedNickname = Taro.getStorageSync('wechatNickname')
@@ -142,9 +145,9 @@ const JoinPage = () => {
           setInviteCode(options.invite_code)
           setActiveTab('join')
           // 如果昵称已有，直接加入
-          const cachedNickname = Taro.getStorageSync('wechatNickname')
-          if (cachedNickname) {
-            setMemberName(cachedNickname)
+          const savedNickname = Taro.getStorageSync('wechatNickname')
+          if (savedNickname) {
+            setMemberName(savedNickname)
             setTimeout(() => handleJoinGroup(options.invite_code), 300)
           } else {
             setShowAutoJoin(true)
@@ -175,17 +178,17 @@ const JoinPage = () => {
         setMemberName(nickname)
       }
 
-        const token = Taro.getStorageSync('token')
-        const res = await Network.request({
-          url: '/api/groups/create',
-          method: 'POST',
-          data: {
-            name: groupName,
-            member_name: memberName,
-            user_id: userId
-          },
-          header: token ? { Authorization: `Bearer ${token}` } : {}
-        })
+      const token = Taro.getStorageSync('token')
+      const res = await Network.request({
+        url: '/api/groups/create',
+        method: 'POST',
+        data: {
+          name: groupName,
+          member_name: nickname,
+          user_id: userId
+        },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
+      })
 
       console.log('开房响应:', res.data)
 
@@ -205,7 +208,6 @@ const JoinPage = () => {
 
         // 保存到开房历史记录
         try {
-          const token = Taro.getStorageSync('token')
           await Network.request({
             url: '/api/groups/save-history',
             method: 'POST',
@@ -256,8 +258,9 @@ const JoinPage = () => {
   }
 
   // 加入房间
-  const joinGroup = async () => {
-    if (!inviteCode.trim()) {
+  const handleJoinGroup = async (code?: string) => {
+    const targetCode = code || inviteCode
+    if (!targetCode.trim()) {
       showToast({ title: '请输入房号', icon: 'none' })
       return
     }
@@ -281,7 +284,7 @@ const JoinPage = () => {
         url: '/api/groups/join',
         method: 'POST',
         data: {
-          invite_code: inviteCode,
+          invite_code: targetCode,
           member_name: memberName
         },
         header: token ? { Authorization: `Bearer ${token}` } : {}
@@ -428,11 +431,10 @@ const JoinPage = () => {
   // 配置分享信息
   useShareAppMessage(() => {
     const groupToShare = currentGroup || Taro.getStorageSync('currentGroup')
-    // 同时传递 invite_code（小程序路由参数）和 inviteCode（前端解析用）
-    const inviteCode = groupToShare?.invite_code || groupToShare?.inviteCode || ''
+    const shareCode = groupToShare?.invite_code || ''
     return {
       title: `邀请你加入房间「${groupToShare?.name || '积分管理'}」`,
-      path: `/pages/join/index?invite_code=${inviteCode}`,
+      path: `/pages/join/index?invite_code=${shareCode}`,
       imageUrl: ''
     }
   })
@@ -500,7 +502,7 @@ const JoinPage = () => {
 
               <Button
                 className="w-full"
-                onClick={joinGroup}
+                onClick={() => handleJoinGroup()}
                 disabled={loading}
               >
                 {loading ? '加入中...' : '加入'}

@@ -1,5 +1,5 @@
 import { View, Text } from '@tarojs/components'
-import { useLoad, useDidShow, showToast } from '@tarojs/taro'
+import Taro, { useLoad, useDidShow, showToast } from '@tarojs/taro'
 import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
