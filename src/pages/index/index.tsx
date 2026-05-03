@@ -23,7 +23,8 @@ export default function Index() {
     setMembers,
     isHost,
     currentMemberId,
-    clearGroup
+    clear,
+    clearGame
   } = useGroupStore()
   
   const [loading, setLoading] = useState(false)
@@ -305,7 +306,7 @@ export default function Index() {
       success: (res) => {
         if (res.confirm) {
           gameSocket.disconnect()
-          clearGroup()
+          clear()
           Taro.reLaunch({ url: '/pages/join/index' })
         }
       }
