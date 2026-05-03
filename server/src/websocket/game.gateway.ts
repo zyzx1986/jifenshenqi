@@ -8,8 +8,8 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Injectable, Logger, Inject } from '@nestjs/common';
-import { SupabaseService } from '../storage/supabase.service';
+import { Injectable, Logger } from '@nestjs/common';
+import { getSupabaseClient } from '../storage/database/supabase-client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 interface RoomClient {
@@ -34,8 +34,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   
   // 存储房间内的客户端信息
   private roomClients: Map<string, Map<string, RoomClient>> = new Map();
+  private supabase = getSupabaseClient();
 
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(private eventEmitter: EventEmitter2) {}
 
   async handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
@@ -83,7 +84,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.roomClients.set(roomId, new Map());
     }
     
-    this.roomClients.get(roomId).set(client.id, {
+    const roomMap = this.roomClients.get(roomId)!;
+    roomMap.set(client.id, {
       socketId: client.id,
       memberId,
       memberName,
@@ -96,7 +98,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // 通知新加入的成员当前房间状态
     client.emit('roomState', {
       members,
-      memberCount: this.roomClients.get(roomId).size,
+      memberCount: roomMap.size,
     });
     
     // 通知房间内其他成员有人加入
@@ -215,7 +217,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private async getRoomMembers(roomId: string) {
     try {
       // 通过 invite_code 查找成员
-      const { data: group } = await this.supabaseService.getClient()
+      const { data: group } = await this.supabase
         .from('groups')
         .select('id')
         .eq('invite_code', roomId)
@@ -225,7 +227,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return [];
       }
       
-      const { data: members } = await this.supabaseService.getClient()
+      const { data: members } = await this.supabase
         .from('members')
         .select('id, name, points, user_id, is_host')
         .eq('group_id', group.id);

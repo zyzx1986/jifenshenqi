@@ -9,6 +9,16 @@ export class GroupsService {
   private client = getSupabaseClient()
   private jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
 
+  // 验证 token 并返回用户 ID
+  private verifyToken(token: string): string {
+    try {
+      const decoded = jwt.verify(token, this.jwtSecret) as any
+      return decoded.userId
+    } catch (error) {
+      throw new Error('无效的认证令牌')
+    }
+  }
+
   async createGroup(name: string, memberName: string, userId: string): Promise<{ group: Group; member: Member }> {
     // const userId = `user_${Date.now()}` // 改为传入 userId
     const inviteCode = this.generateInviteCode()
@@ -402,7 +412,7 @@ export class GroupsService {
       if (!userId) return null
 
       // 先查找是否有正在进行中的对局
-      const { data: existing } = await supabase
+      const { data: existing } = await this.client
         .from('game_sessions')
         .select('*')
         .eq('group_id', data.group_id)
@@ -422,7 +432,7 @@ export class GroupsService {
 
       if (existing) {
         // 更新现有对局
-        const { data: updated } = await supabase
+        const { data: updated } = await this.client
           .from('game_sessions')
           .update(sessionData)
           .eq('id', existing.id)
@@ -431,7 +441,7 @@ export class GroupsService {
         return updated
       } else {
         // 创建新对局
-        const { data: created } = await supabase
+        const { data: created } = await this.client
           .from('game_sessions')
           .insert(sessionData)
           .select()
@@ -447,7 +457,7 @@ export class GroupsService {
   // 获取当前对局状态
   async getCurrentGameSession(token: string, inviteCode: string) {
     try {
-      const { data } = await supabase
+      const { data } = await this.client
         .from('game_sessions')
         .select('*')
         .eq('invite_code', inviteCode)
@@ -470,7 +480,7 @@ export class GroupsService {
   // 通过房号获取当前对局（无需认证）
   async getCurrentSession(token: string, inviteCode: string) {
     try {
-      const { data } = await supabase
+      const { data } = await this.client
         .from('game_sessions')
         .select('*')
         .eq('invite_code', inviteCode)
@@ -503,21 +513,21 @@ export class GroupsService {
       if (!userId) return null
 
       // 获取房间信息
-      const { data: group } = await supabase
+      const { data: group } = await this.client
         .from('groups')
         .select('name')
         .eq('id', data.group_id)
         .single()
 
       // 更新对局状态为已结束
-      await supabase
+      await this.client
         .from('game_sessions')
         .update({ status: 'finished' })
         .eq('group_id', data.group_id)
         .eq('status', 'playing')
 
       // 保存到历史记录
-      const { data: history } = await supabase
+      const { data: history } = await this.client
         .from('game_history')
         .insert({
           group_id: data.group_id,
@@ -534,12 +544,12 @@ export class GroupsService {
 
       // 更新成员的累计积分
       for (const p of data.participants) {
-        await supabase.rpc('update_member_total', {
+        await this.client.rpc('update_member_total', {
           p_member_id: p.member_id,
           p_points: p.score
         }).catch(() => {
           // 如果存储过程不存在，手动更新
-          supabase
+          this.client
             .from('members')
             .update({
               total_points: (p.score || 0),
@@ -559,7 +569,7 @@ export class GroupsService {
   // 获取对局历史记录
   async getGameHistory(token: string, inviteCode: string) {
     try {
-      const { data: history } = await supabase
+      const { data: history } = await this.client
         .from('game_history')
         .select('*')
         .eq('invite_code', inviteCode)
@@ -581,7 +591,7 @@ export class GroupsService {
   async getGameStats(token: string, inviteCode: string) {
     try {
       // 获取最近10局历史
-      const { data: history } = await supabase
+      const { data: history } = await this.client
         .from('game_history')
         .select('*')
         .eq('invite_code', inviteCode)
