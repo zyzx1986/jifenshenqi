@@ -151,13 +151,44 @@ export default function Index() {
     }
   }, [])
 
+  // 获取微信昵称
+  const fetchWechatNickname = async (): Promise<string> => {
+    const cached = Taro.getStorageSync('wechatNickname')
+    if (cached) return cached
+    
+    return new Promise<string>((resolve) => {
+      if (typeof wx !== 'undefined' && wx.getUserProfile) {
+        wx.getUserProfile({
+          desc: '用于设置房间昵称',
+          success: (res) => {
+            const nickname = res.userInfo?.nickName || ''
+            if (nickname) {
+              Taro.setStorageSync('wechatNickname', nickname)
+            }
+            resolve(nickname)
+          },
+          fail: () => resolve('')
+        })
+      } else {
+        resolve('')
+      }
+    })
+  }
+
   // 自动创建房间
   const autoCreateRoom = async () => {
     if (autoJoining) return
     setAutoJoining(true)
     
     try {
-      const nickname = Taro.getStorageSync('wechatNickname') || `用户${Date.now().toString(36)}`
+      // 获取微信昵称
+      let nickname = Taro.getStorageSync('wechatNickname')
+      if (!nickname) {
+        nickname = await fetchWechatNickname()
+      }
+      if (!nickname) {
+        nickname = `用户${Date.now().toString(36).slice(-6)}`
+      }
       const token = Taro.getStorageSync('token')
       
       const res = await Network.request({
@@ -203,12 +234,13 @@ export default function Index() {
     setAutoJoining(true)
     
     try {
-      const nickname = Taro.getStorageSync('wechatNickname')
+      // 获取微信昵称
+      let nickname = Taro.getStorageSync('wechatNickname')
       if (!nickname) {
-        // 昵称未获取，延迟后再试
-        setTimeout(() => autoJoinRoom(inviteCode), 1000)
-        setAutoJoining(false)
-        return
+        nickname = await fetchWechatNickname()
+      }
+      if (!nickname) {
+        nickname = `用户${Date.now().toString(36).slice(-6)}`
       }
       
       const token = Taro.getStorageSync('token')
