@@ -10,7 +10,7 @@ import { Network } from '@/network'
 import { History, ChartBarBig } from 'lucide-react-taro'
 
 const ProfilePage = () => {
-  const { currentGroup, currentMember, setCurrentGroup, setCurrentMember } = useGroupStore()
+  const { currentGroup, currentMember, setCurrentMember, clear } = useGroupStore()
   const [showNameInput, setShowNameInput] = useState(false)
   const [name, setName] = useState('')
 
@@ -51,8 +51,8 @@ const ProfilePage = () => {
       content: '确定要退出当前房间吗？',
       success: (res) => {
         if (res.confirm) {
-          setCurrentGroup(null)
-          setCurrentMember(null)
+          clear() // 清理所有状态和本地存储
+          Taro.reLaunch({ url: '/pages/join/index' })
           showToast({ title: '已退出房间', icon: 'success' })
         }
       }
