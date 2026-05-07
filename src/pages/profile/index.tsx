@@ -1,49 +1,13 @@
 import { View, Text } from '@tarojs/components'
-import Taro, { useLoad, useDidShow, showToast, navigateTo, switchTab, showModal, setClipboardData } from '@tarojs/taro'
-import { useState } from 'react'
+import Taro, { useDidShow, showToast, navigateTo, showModal, setClipboardData } from '@tarojs/taro'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useGroupStore } from '@/stores/group'
-import { Network } from '@/network'
 import { History, ChartBarBig } from 'lucide-react-taro'
 
 const ProfilePage = () => {
-  const { currentGroup, currentMember, setCurrentMember, clear } = useGroupStore()
-  const [showNameInput, setShowNameInput] = useState(false)
-  const [name, setName] = useState('')
-
-  const updateMemberName = async () => {
-    if (!name.trim()) {
-      showToast({ title: '请输入昵称', icon: 'none' })
-      return
-    }
-
-    if (!currentMember) return
-
-    try {
-      const token = Taro.getStorageSync('token')
-      const res = await Network.request({
-        url: '/api/members/update',
-        method: 'POST',
-        data: {
-          member_id: currentMember.id,
-          name
-        },
-        header: token ? { Authorization: `Bearer ${token}` } : {}
-      })
-
-      console.log('更新昵称结果:', res.data)
-
-      setCurrentMember({ ...currentMember, name })
-      setShowNameInput(false)
-      showToast({ title: '更新成功', icon: 'success' })
-    } catch (error) {
-      console.error('更新昵称失败:', error)
-      showToast({ title: '更新失败', icon: 'none' })
-    }
-  }
+  const { currentGroup, currentMember, clear } = useGroupStore()
 
   const leaveGroup = () => {
     showModal({
@@ -70,17 +34,8 @@ const ProfilePage = () => {
     })
   }
 
-  useLoad(() => {
-    console.log('Profile page loaded.')
-    if (currentMember) {
-      setName(currentMember.name)
-    }
-  })
-
   useDidShow(() => {
-    if (currentMember) {
-      setName(currentMember.name)
-    }
+    // refresh data if needed
   })
 
   return (
@@ -128,37 +83,6 @@ const ProfilePage = () => {
               <CardTitle className="text-base">我的信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <View>
-                <Label>昵称</Label>
-                <View className="flex items-center gap-2 mt-1">
-                  {showNameInput ? (
-                    <Input
-                      className="flex-1"
-                      value={name}
-                      onInput={(e) => setName(e.detail.value)}
-                      placeholder="输入昵称"
-                    />
-                  ) : (
-                    <Text className="block text-sm text-gray-700 flex-1">
-                      {currentMember?.name || '未设置'}
-                    </Text>
-                  )}
-                  <Button
-                    size="sm"
-                    variant={showNameInput ? "default" : "outline"}
-                    onClick={() => {
-                      if (showNameInput) {
-                        updateMemberName()
-                      } else {
-                        setShowNameInput(true)
-                      }
-                    }}
-                  >
-                    {showNameInput ? '保存' : '修改'}
-                  </Button>
-                </View>
-              </View>
-
               <View>
                 <Label>我的积分</Label>
                 <Text className="block text-2xl font-bold text-blue-500 mt-1">
