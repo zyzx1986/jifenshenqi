@@ -133,7 +133,15 @@ export const useGroupStore = create<GroupState>((set) => {
         }
       }),
     clearGame: () => set({ currentGame: null }),
-    clear: () => set({ currentGroup: null, currentMember: null, members: [], currentGame: null }),
+    clear: () => {
+      // 清理 localStorage
+      Taro.removeStorageSync('currentGroup')
+      Taro.removeStorageSync('currentMember')
+      Taro.removeStorageSync('members')
+      Taro.removeStorageSync('currentGame')
+      // 清理 Zustand store
+      set({ currentGroup: null, currentMember: null, members: [], currentGame: null })
+    },
   }
 })
 
