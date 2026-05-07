@@ -34,6 +34,18 @@ export default function Index() {
   const [recovering, setRecovering] = useState(false)
   const [autoJoining, setAutoJoining] = useState(false)
 
+  // 随机房间名称库
+  const roomNamePrefixes = ['快乐', '开心', '幸运', '阳光', '彩虹', '星空', '梦想', '奇迹', '冒险', '自由']
+  const roomNameSuffixes = ['小屋', '城堡', '星球', '花园', '乐园', '俱乐部', '工坊', '基地', '部落', '联盟']
+  
+  // 生成随机房间名称
+  const generateRandomRoomName = () => {
+    const prefix = roomNamePrefixes[Math.floor(Math.random() * roomNamePrefixes.length)]
+    const suffix = roomNameSuffixes[Math.floor(Math.random() * roomNameSuffixes.length)]
+    const number = Math.floor(Math.random() * 100).toString().padStart(2, '0')
+    return `${prefix}${suffix}${number}`
+  }
+
   // 加载成员列表
   const loadMembers = async () => {
     const savedGroup = Taro.getStorageSync('currentGroup')
@@ -88,7 +100,7 @@ export default function Index() {
         url: '/api/groups/create',
         method: 'POST',
         data: {
-          name: `${nickname}的房间`,
+          name: generateRandomRoomName(),
           member_name: nickname
         },
         header: token ? { Authorization: `Bearer ${token}` } : {}
