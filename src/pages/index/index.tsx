@@ -32,6 +32,7 @@ export default function Index() {
   const [connected, setConnected] = useState(false)
   const [showRecovery, setShowRecovery] = useState(false)
   const [recovering, setRecovering] = useState(false)
+  const [autoJoining, setAutoJoining] = useState(false)
 
   // 加载成员列表
   const loadMembers = async () => {
@@ -74,7 +75,107 @@ export default function Index() {
     }
   }, [])
 
-  // 页面显示时检查是否需要恢复对局和加载成员
+  // 自动创建房间
+  const autoCreateRoom = async () => {
+    if (autoJoining) return
+    setAutoJoining(true)
+    
+    try {
+      const nickname = Taro.getStorageSync('wechatNickname') || `用户${Date.now().toString(36)}`
+      const token = Taro.getStorageSync('token')
+      
+      const res = await Network.request({
+        url: '/api/groups/create',
+        method: 'POST',
+        data: {
+          name: `${nickname}的房间`,
+          member_name: nickname
+        },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+      
+      const result = res.data as any
+      if (result.code === 200 && result.data) {
+        const { group, member } = result.data
+        setCurrentGroup(group)
+        setMembers(group.members || [member])
+        setCurrentMember(member)
+        
+        // 连接 WebSocket
+        setTimeout(() => {
+          gameSocket.connect({
+            roomId: group.invite_code,
+            memberId: member.id,
+            memberName: member.name,
+            userId: Taro.getStorageSync('userId') || ''
+          })
+        }, 500)
+        
+        Taro.showToast({ title: '已创建房间', icon: 'none' })
+      }
+    } catch (err) {
+      console.error('自动创建房间失败:', err)
+      Taro.showToast({ title: '创建房间失败', icon: 'none' })
+    } finally {
+      setAutoJoining(false)
+    }
+  }
+
+  // 自动加入房间
+  const autoJoinRoom = async (inviteCode: string) => {
+    if (autoJoining) return
+    setAutoJoining(true)
+    
+    try {
+      const nickname = Taro.getStorageSync('wechatNickname')
+      if (!nickname) {
+        // 昵称未获取，延迟后再试
+        setTimeout(() => autoJoinRoom(inviteCode), 1000)
+        setAutoJoining(false)
+        return
+      }
+      
+      const token = Taro.getStorageSync('token')
+      const res = await Network.request({
+        url: '/api/groups/join',
+        method: 'POST',
+        data: {
+          invite_code: inviteCode,
+          member_name: nickname
+        },
+        header: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+      
+      const result = res.data as any
+      if (result.code === 200 && result.data) {
+        const { group, member } = result.data
+        setCurrentGroup(group)
+        setMembers(group.members || [member])
+        setCurrentMember(member)
+        
+        // 连接 WebSocket
+        setTimeout(() => {
+          gameSocket.connect({
+            roomId: group.invite_code,
+            memberId: member.id,
+            memberName: member.name,
+            userId: Taro.getStorageSync('userId') || ''
+          })
+        }, 500)
+        
+        Taro.showToast({ title: '已加入房间', icon: 'none' })
+      } else {
+        Taro.showToast({ title: result.msg || '加入房间失败', icon: 'none' })
+      }
+    } catch (err) {
+      console.error('自动加入房间失败:', err)
+      Taro.showToast({ title: '加入房间失败', icon: 'none' })
+    } finally {
+      setAutoJoining(false)
+    }
+  }
+
+  // 页面显示时检查URL参数或自动创建房间
   useDidShow(() => {
     // 先从本地存储获取房间信息
     const savedGroup = Taro.getStorageSync('currentGroup')
@@ -85,9 +186,26 @@ export default function Index() {
         setCurrentGroup(savedGroup)
       }
       loadMembers()
+      checkRecovery()
+      return
     }
     
-    checkRecovery()
+    // 没有房间，检查URL参数
+    const pages = Taro.getCurrentPages()
+    const currentPage = pages[pages.length - 1]
+    if (currentPage) {
+      const options = (currentPage as any).options || (currentPage as any).$taroOptions || {}
+      if (options.invite_code && options.invite_code !== 'undefined') {
+        // 有邀请码，加入房间
+        autoJoinRoom(options.invite_code)
+      } else {
+        // 没有邀请码，自动创建房间
+        autoCreateRoom()
+      }
+    } else {
+      // 无法获取参数，自动创建房间
+      autoCreateRoom()
+    }
   })
 
   // 检查是否需要恢复对局
@@ -338,18 +456,13 @@ export default function Index() {
     })
   }
 
-  // 跳转到加入/创建页面
-  const handleGoJoin = () => {
-    Taro.reLaunch({ url: '/pages/join/index' })
-  }
-
   // 获取领先者
   const getLeader = () => {
     if (members.length === 0) return null
     return [...members].sort((a, b) => b.total_points - a.total_points)[0]
   }
 
-  // 如果没有加入房间，显示加入提示
+  // 如果没有加入房间，显示加载状态
   if (!currentGroup) {
     return (
       <View className="index-page min-h-screen bg-gray-50">
@@ -358,11 +471,12 @@ export default function Index() {
             <View className="w-24 h-24 mx-auto mb-6 rounded-full bg-blue-100 flex items-center justify-center">
               <Users size={48} color="#1890ff" />
             </View>
-            <Text className="block text-xl font-semibold text-gray-800 mb-2">还未加入房间</Text>
-            <Text className="block text-sm text-gray-500 mb-8">加入或开房后开始积分</Text>
-            <Button onClick={handleGoJoin} className="w-full max-w-xs">
-              <Text className="text-white">加入/开房</Text>
-            </Button>
+            <Text className="block text-xl font-semibold text-gray-800 mb-2">
+              {autoJoining ? '正在进入房间...' : '正在初始化...'}
+            </Text>
+            <Text className="block text-sm text-gray-500">
+              {autoJoining ? '请稍候' : '即将自动创建房间'}
+            </Text>
           </View>
         </View>
       </View>
