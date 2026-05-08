@@ -5,33 +5,41 @@ import Taro from '@tarojs/taro'
 let globalKeyboardHeight = 0
 const listeners = new Set<(height: number) => void>()
 
-const isNotWeb = Taro.getEnv() !== Taro.ENV_TYPE.WEB
+// 延迟初始化，避免在 Taro 未完全初始化时调用
+let keyboardListenerInitialized = false
 
-if (isNotWeb && typeof Taro.onKeyboardHeightChange === 'function') {
+const initKeyboardListener = () => {
+  if (keyboardListenerInitialized) return
+  keyboardListenerInitialized = true
+  
+  // 只有在非 H5 环境下才监听键盘高度变化
+  if (typeof Taro !== 'undefined' && Taro.getEnv && Taro.getEnv() !== 'WEB' && typeof Taro.onKeyboardHeightChange === 'function') {
     Taro.onKeyboardHeightChange(res => {
-        globalKeyboardHeight = res.height
-        listeners.forEach(listener => listener(globalKeyboardHeight))
+      globalKeyboardHeight = res.height || 0
+      listeners.forEach(listener => listener(globalKeyboardHeight))
     })
+  }
 }
 
 export function useKeyboardOffset() {
-    const [offset, setOffset] = React.useState(globalKeyboardHeight)
+  // 确保键盘监听器已初始化
+  initKeyboardListener()
+  
+  const [offset, setOffset] = React.useState(globalKeyboardHeight)
 
-    React.useEffect(() => {
-        if (!isNotWeb) return
+  React.useEffect(() => {
+    const handler = (height: number) => {
+      setOffset(height)
+    }
 
-        const handler = (height: number) => {
-            setOffset(height)
-        }
+    listeners.add(handler)
+    // Update immediately with current global value in case it changed
+    setOffset(globalKeyboardHeight)
 
-        listeners.add(handler)
-        // Update immediately with current global value in case it changed
-        setOffset(globalKeyboardHeight)
+    return () => {
+      listeners.delete(handler)
+    }
+  }, [])
 
-        return () => {
-            listeners.delete(handler)
-        }
-    }, [])
-
-    return offset
+  return offset
 }
