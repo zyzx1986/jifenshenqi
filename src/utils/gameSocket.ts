@@ -52,38 +52,35 @@ class GameSocket {
     }
   }
 
-  // H5 环境连接
+  // H5 环境连接 - 使用原生 WebSocket
   private connectH5() {
     try {
-      this.socket = Taro.connectSocket({
-        url: this.getWsUrl(),
-        success: () => {
-          console.log('[WebSocket] 连接请求已发送')
-        },
-        fail: (err) => {
-          console.error('[WebSocket] 连接失败:', err)
-        }
-      } as any)
+      const url = this.getWsUrl()
+      console.log('[WebSocket] 正在连接:', url)
 
-      this.socket.onOpen(() => {
+      // H5 环境使用原生 WebSocket API
+      const socket = new WebSocket(url)
+
+      socket.onopen = () => {
         console.log('[WebSocket] 连接成功')
         this.isConnected = true
+        this.socket = socket
         this.joinRoom()
-      })
+      }
 
-      this.socket.onMessage((res) => {
-        this.handleMessage(res.data)
-      })
+      socket.onmessage = (event) => {
+        this.handleMessage(event.data)
+      }
 
-      this.socket.onError((err) => {
-        console.error('[WebSocket] 错误:', err)
-      })
+      socket.onerror = (error) => {
+        console.error('[WebSocket] 错误:', error)
+      }
 
-      this.socket.onClose(() => {
+      socket.onclose = () => {
         console.log('[WebSocket] 连接关闭')
         this.isConnected = false
         this.scheduleReconnect()
-      })
+      }
     } catch (err) {
       console.error('[WebSocket] 创建连接失败:', err)
     }
@@ -145,12 +142,14 @@ class GameSocket {
   send(event: string, data: any) {
     if (this.socket && this.isConnected) {
       const message = JSON.stringify({ event, data })
-      this.socket.send({
-        data: message,
-        fail: (err: any) => {
-          console.error('[WebSocket] 发送消息失败:', err)
+      try {
+        // H5 原生 WebSocket
+        if (this.socket.send instanceof Function) {
+          this.socket.send(message)
         }
-      })
+      } catch (err) {
+        console.error('[WebSocket] 发送消息失败:', err)
+      }
     } else {
       console.warn('[WebSocket] 未连接，无法发送消息')
     }
@@ -199,17 +198,26 @@ class GameSocket {
 
     if (this.socket) {
       this.send('leaveRoom', { roomId: this.roomId })
-      
+
       try {
-        Taro.closeSocket({
-          success: () => {
-            console.log('[WebSocket] 主动关闭连接')
+        const env = Taro.getEnv()
+        if (env === Taro.ENV_TYPE.WEB) {
+          // H5 环境使用原生 WebSocket close
+          if (this.socket.close instanceof Function) {
+            this.socket.close()
           }
-        })
+        } else {
+          // 小程序环境使用 Taro API
+          Taro.closeSocket({
+            success: () => {
+              console.log('[WebSocket] 主动关闭连接')
+            }
+          })
+        }
       } catch (err) {
         console.error('[WebSocket] 关闭连接失败:', err)
       }
-      
+
       this.socket = null
       this.isConnected = false
     }
