@@ -223,21 +223,23 @@ export default function Index() {
 
   // 页面显示时检查URL参数或自动创建房间
   useDidShow(() => {
-    // 先从 URL 参数检查是否有邀请码
-    const pages = Taro.getCurrentPages()
-    const currentPage = pages[pages.length - 1]
+    // 优先使用 Taro.getCurrentInstance 获取启动参数（从分享链接进入时）
+    const instance = Taro.getCurrentInstance()
+    const launchData = instance.router?.params || {}
     
-    if (currentPage) {
-      const options = (currentPage as any).options || (currentPage as any).$taroOptions || {}
-      if (options.invite_code && options.invite_code !== 'undefined') {
-        // 有邀请码，优先处理加入房间
-        // 清除旧的房间数据，确保加入新房间
-        clear()
-        setTimeout(() => {
-          autoJoinRoom(options.invite_code)
-        }, 100)
-        return
-      }
+    // 检查是否有邀请码参数
+    const inviteCode = launchData.invite_code
+    
+    console.log('[Index] useDidShow - 启动参数:', launchData, '邀请码:', inviteCode)
+    
+    if (inviteCode) {
+      // 有邀请码，优先处理加入房间
+      // 清除旧的房间数据，确保加入新房间
+      clear()
+      setTimeout(() => {
+        autoJoinRoom(inviteCode)
+      }, 100)
+      return
     }
     
     // 没有邀请码，检查本地存储的房间信息

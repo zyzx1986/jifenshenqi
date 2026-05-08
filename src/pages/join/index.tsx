@@ -1,5 +1,5 @@
 import { View, Text, Image } from '@tarojs/components'
-import Taro, { useLoad, showToast, switchTab, useShareAppMessage } from '@tarojs/taro'
+import Taro, { useDidShow, showToast, switchTab, useShareAppMessage } from '@tarojs/taro'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { ShareButton } from '@/components/ui/share-button'
@@ -395,29 +395,29 @@ const JoinPage = () => {
     }, 300)
   }
 
-  // 检查是否从分享链接进入
-  useLoad(() => {
+  // 检查是否从分享链接进入（每次页面显示时都检查）
+  useDidShow(() => {
     const instance = Taro.getCurrentInstance()
     const params = instance.router?.params || {}
-
-    if (params.invite_code) {
+    
+    console.log('[Join] useDidShow - 检测邀请码, params:', params)
+    
+    if (params.invite_code && !hasAutoJoined && !autoJoinLoading) {
       const code = params.invite_code.toUpperCase()
+      console.log('[Join] 检测到邀请码:', code, '开始自动加入...')
+      
+      // 标记已触发
+      setHasAutoJoined(true)
+      // 设置邀请码
       setInviteCode(code)
-      setActiveTab('join')
-      setShowAutoJoin(true) // 显示一键加入按钮
-      console.log('检测到房号:', code)
+      
+      // 清除旧数据并加入
+      useGroupStore.getState().clear()
+      setTimeout(() => {
+        quickJoin()
+      }, 100)
     }
-
-    console.log('Join page loaded, params:', params)
   })
-
-  // 自动加入房间逻辑
-  useEffect(() => {
-    if (showAutoJoin && inviteCode && !hasAutoJoined && !autoJoinLoading) {
-      setHasAutoJoined(true) // 标记已触发自动加入
-      quickJoin()
-    }
-  }, [showAutoJoin, inviteCode])
 
   // 配置分享信息
   useShareAppMessage(() => {
