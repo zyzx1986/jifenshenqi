@@ -34,9 +34,6 @@ export default function Index() {
   const [showRecovery, setShowRecovery] = useState(false)
   const [recovering, setRecovering] = useState(false)
   const [autoJoining, setAutoJoining] = useState(false)
-  const [editNicknameOpen, setEditNicknameOpen] = useState(false)
-  const [editNickname, setEditNickname] = useState('')
-  const [editNicknameLoading, setEditNicknameLoading] = useState(false)
 
   // 随机房间名称库
   const roomNamePrefixes = ['快乐', '开心', '幸运', '阳光', '彩虹', '星空', '梦想', '奇迹', '冒险', '自由']
@@ -50,65 +47,6 @@ export default function Index() {
     return `${prefix}${suffix}${number}`
   }
 
-  // 修改昵称
-  const handleEditNickname = async () => {
-    const newName = editNickname.trim()
-    if (!newName) {
-      Taro.showToast({ title: '请输入昵称', icon: 'none' })
-      return
-    }
-    if (newName.length > 20) {
-      Taro.showToast({ title: '昵称不能超过20字', icon: 'none' })
-      return
-    }
-
-    setEditNicknameLoading(true)
-    try {
-      const token = Taro.getStorageSync('token')
-      const res = await Network.request({
-        url: '/api/members/update',
-        method: 'POST',
-        data: { 
-          member_id: currentMember?.id,
-          name: newName
-        },
-        header: token ? { Authorization: `Bearer ${token}` } : {}
-      })
-
-      const result = res.data as any
-      if (result.code === 200 || result.code === 0) {
-        // 更新本地状态
-        const updatedMember = { ...currentMember, name: newName }
-        setCurrentMember(updatedMember)
-        
-        // 更新 members 列表中的当前用户
-        const updatedMembers = members.map(m => 
-          m.id === currentMember?.id ? updatedMember : m
-        )
-        setMembers(updatedMembers)
-        
-        // 保存到本地存储
-        Taro.setStorageSync('currentMember', updatedMember)
-        Taro.setStorageSync('wechatNickname', newName)
-        
-        setEditNicknameOpen(false)
-        Taro.showToast({ title: '昵称修改成功', icon: 'success' })
-      } else {
-        Taro.showToast({ title: result.msg || '修改失败', icon: 'none' })
-      }
-    } catch (error) {
-      console.error('修改昵称失败:', error)
-      Taro.showToast({ title: '修改失败', icon: 'none' })
-    } finally {
-      setEditNicknameLoading(false)
-    }
-  }
-
-  // 打开修改昵称弹窗
-  const handleOpenEditNickname = () => {
-    setEditNickname(currentMember?.name || '')
-    setEditNicknameOpen(true)
-  }
 
   // 加载成员列表
   const loadMembers = async () => {
@@ -834,42 +772,7 @@ export default function Index() {
         </View>
       )}
 
-      {/* 修改昵称弹窗 */}
-      <Dialog 
-        open={editNicknameOpen} 
-        onClose={() => setEditNicknameOpen(false)}
-      >
-        <View className="p-4">
-          <Text className="block text-lg font-semibold text-gray-800 mb-4">修改昵称</Text>
-          
-          <View className="mb-4">
-            <Input
-              value={editNickname}
-              onChange={(e: any) => setEditNickname(e.target.value)}
-              placeholder="请输入新昵称"
-              maxlength={20}
-              className="w-full"
-            />
-          </View>
-          
-          <View className="flex gap-3">
-            <Button 
-              variant="outline" 
-              className="flex-1"
-              onClick={() => setEditNicknameOpen(false)}
-            >
-              <Text>取消</Text>
-            </Button>
-            <Button 
-              className="flex-1"
-              onClick={handleEditNickname}
-              disabled={editNicknameLoading}
-            >
-              <Text className="text-white">{editNicknameLoading ? '保存中...' : '保存'}</Text>
-            </Button>
-          </View>
-        </View>
-      </Dialog>
+
     </View>
   )
 }
