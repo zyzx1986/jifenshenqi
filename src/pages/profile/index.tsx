@@ -1,9 +1,10 @@
-import { View, Text, Input } from '@tarojs/components'
+import { View, Text } from '@tarojs/components'
 import Taro, { useDidShow, showToast, navigateTo, switchTab, showModal, setClipboardData } from '@tarojs/taro'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { useGroupStore } from '@/stores/group'
 import { History, ChartBarBig } from 'lucide-react-taro'
 import { Network } from '@/network'
@@ -209,15 +210,14 @@ const ProfilePage = () => {
       )}
 
       {/* 修改昵称弹窗 */}
-      <Dialog open={editNicknameOpen} onClose={() => setEditNicknameOpen(false)}>
+      <Dialog open={editNicknameOpen} onOpenChange={(open) => setEditNicknameOpen(open)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>修改昵称</DialogTitle>
           </DialogHeader>
           <View className="py-4">
-            <View className="bg-gray-50 rounded-xl px-4 py-3 mb-4">
+            <View className="mb-4">
               <Input
-                className="w-full bg-transparent"
                 placeholder="请输入昵称"
                 value={nicknameInput}
                 onInput={(e: any) => setNicknameInput(e.detail.value)}

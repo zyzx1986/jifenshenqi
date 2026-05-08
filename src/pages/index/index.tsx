@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro'
 import { View, Text, ScrollView } from '@tarojs/components'
 import { Input } from '@/components/ui/input'
@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ShareButton } from '@/components/ui/share-button'
-import { Dialog } from '@/components/ui/dialog'
 import { Network } from '@/network'
 import { 
   Users, ArrowLeft, Gift, Crown, RefreshCw
@@ -95,8 +94,9 @@ export default function Index() {
     if (cached) return cached
     
     return new Promise<string>((resolve) => {
-      if (typeof wx !== 'undefined' && wx.getUserProfile) {
-        wx.getUserProfile({
+      // 小程序环境使用 Taro.getUserProfile
+      if (Taro.getEnv() === 'WEAPP' && Taro.canIUse('getUserProfile')) {
+        Taro.getUserProfile({
           desc: '用于设置房间昵称',
           success: (res) => {
             const nickname = res.userInfo?.nickName || ''
