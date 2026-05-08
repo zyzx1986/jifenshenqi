@@ -258,7 +258,7 @@ export default function Index() {
       const token = Taro.getStorageSync('token')
       console.log('发送给分请求...')
       const res = await Network.request({
-        url: '/api/members/points/give',
+        url: '/api/points/give',
         method: 'POST',
         data: {
           group_id: currentGroup.id,
