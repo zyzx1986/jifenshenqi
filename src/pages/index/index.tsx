@@ -78,8 +78,39 @@ export default function Index() {
       loadMembers()
       checkRecovery()
       connectWebSocket()
+      setupWebSocketHandlers()
     }
   })
+
+  // 设置 WebSocket 消息处理器
+  const setupWebSocketHandlers = () => {
+    // 监听新成员加入 (后端发送 memberJoined)
+    gameSocket.on('memberJoined', (data: any) => {
+      console.log('[Index] 收到成员加入通知:', data)
+      // 刷新成员列表
+      loadMembers()
+      if (data.memberName) {
+        Taro.showToast({ title: `${data.memberName} 加入了房间`, icon: 'none' })
+      }
+    })
+
+    // 监听成员离开 (后端发送 memberLeft)
+    gameSocket.on('memberLeft', (data: any) => {
+      console.log('[Index] 收到成员离开通知:', data)
+      // 刷新成员列表
+      loadMembers()
+      if (data.memberName) {
+        Taro.showToast({ title: `${data.memberName} 离开了房间`, icon: 'none' })
+      }
+    })
+
+    // 监听积分更新 (后端发送 pointsUpdated)
+    gameSocket.on('pointsUpdated', (data: any) => {
+      console.log('[Index] 收到积分更新通知:', data)
+      // 刷新成员列表
+      loadMembers()
+    })
+  }
 
   // 检查是否需要恢复对局
   const checkRecovery = async () => {
@@ -228,9 +259,26 @@ export default function Index() {
         setGivePoints('')
         setSelectedMember(null)
         
-        if (result.data) {
+        // 更新成员列表，兼容两种响应格式
+        let updatedMembers = members
+        if (result.data?.members) {
+          updatedMembers = result.data.members
+          setMembers(result.data.members)
+        } else if (Array.isArray(result.data)) {
+          updatedMembers = result.data
           setMembers(result.data)
         }
+        
+        // 通过 WebSocket 通知其他成员积分已更新
+        gameSocket.send('pointUpdate', {
+          roomId: currentGroup.invite_code,
+          fromMemberId: currentMember?.id,
+          toMemberId: selectedMember.id,
+          points: points,
+          fromMemberName: currentMember?.name,
+          toMemberName: selectedMember.name,
+          currentMembers: updatedMembers
+        })
       } else {
         Taro.showToast({ title: result.msg || '给分失败', icon: 'none' })
       }

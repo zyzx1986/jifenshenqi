@@ -1,175 +1,129 @@
-import Taro from '@tarojs/taro'
+import { io, Socket } from 'socket.io-client'
 
-// WebSocket 连接管理
+interface GameSocketConfig {
+  roomId: string
+  memberId: string
+  memberName: string
+  userId: string
+}
+
+type MessageHandler = (data: any) => void
+
+// 获取域名
+function getDomain(): string {
+  // @ts-ignore
+  if (typeof PROJECT_DOMAIN !== 'undefined') {
+    // @ts-ignore
+    return PROJECT_DOMAIN
+  }
+  return 'localhost:3000'
+}
+
 class GameSocket {
-  private socket: any = null
-  private isConnected = false
-  private roomId = ''
-  private memberId = ''
-  private memberName = ''
-  private userId = ''
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  private messageHandlers: Map<string, Function[]> = new Map()
+  private socket: Socket | null = null
+  private messageHandlers: Map<string, MessageHandler[]> = new Map()
+  private config: GameSocketConfig | null = null
+  private reconnectTimer: NodeJS.Timeout | null = null
+  private isManualDisconnect = false
 
   // 获取 WebSocket URL
-  private getWsUrl() {
-    // 在开发环境和生产环境使用不同的 URL
-    const env = Taro.getEnv()
-    if (env === Taro.ENV_TYPE.WEAPP || env === Taro.ENV_TYPE.TT) {
-      // 小程序环境使用相对路径
-      return `/game`
-    }
-    // H5 环境
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${window.location.host}/game`
-  }
-
-  // 连接房间
-  connect(options: {
-    roomId: string
-    memberId: string
-    memberName: string
-    userId: string
-  }) {
-    this.roomId = options.roomId
-    this.memberId = options.memberId
-    this.memberName = options.memberName
-    this.userId = options.userId
-
-    // 如果已经连接，先断开
-    if (this.socket) {
-      this.disconnect()
-    }
-
-    const env = Taro.getEnv()
+  private getWsUrl(): string {
+    const domain = getDomain()
     
-    // H5 环境使用原生 WebSocket
-    if (env === Taro.ENV_TYPE.WEB) {
-      this.connectH5()
-    } else {
-      // 小程序环境使用 socketTask
-      this.connectMiniApp()
+    // H5 环境
+    if (typeof window !== 'undefined') {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      return `${protocol}//${domain}/game`
     }
+    
+    // 小程序环境使用 wss
+    return `wss://${domain}/game`
   }
 
-  // H5 环境连接 - 使用原生 WebSocket
-  private connectH5() {
+  // 连接
+  connect(config: GameSocketConfig) {
+    this.config = config
+    this.isManualDisconnect = false
+    this.disconnect()
+
     try {
       const url = this.getWsUrl()
-      console.log('[WebSocket] 正在连接:', url)
+      console.log('[GameSocket] 正在连接:', url)
 
-      // H5 环境使用原生 WebSocket API
-      const socket = new WebSocket(url)
-
-      socket.onopen = () => {
-        console.log('[WebSocket] 连接成功')
-        this.isConnected = true
-        this.socket = socket
-        this.joinRoom()
-      }
-
-      socket.onmessage = (event) => {
-        this.handleMessage(event.data)
-      }
-
-      socket.onerror = (error) => {
-        console.error('[WebSocket] 错误:', error)
-      }
-
-      socket.onclose = () => {
-        console.log('[WebSocket] 连接关闭')
-        this.isConnected = false
-        this.scheduleReconnect()
-      }
-    } catch (err) {
-      console.error('[WebSocket] 创建连接失败:', err)
-    }
-  }
-
-  // 小程序环境连接
-  private connectMiniApp() {
-    try {
-      let url = this.getWsUrl()
-      
-      // 小程序环境直接使用相对路径
-      url = `/game`
-
-      this.socket = Taro.connectSocket({
-        url,
-        success: () => {
-          console.log('[WebSocket] 连接请求已发送')
-        },
-        fail: (err) => {
-          console.error('[WebSocket] 连接失败:', err)
+      this.socket = io(url, {
+        transports: ['websocket'],
+        autoConnect: true,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        query: {
+          roomId: config.roomId,
+          memberId: config.memberId,
+          memberName: config.memberName,
+          userId: config.userId
         }
-      } as any)
+      })
 
-      this.socket.onOpen(() => {
-        console.log('[WebSocket] 连接成功')
-        this.isConnected = true
+      this.socket.on('connect', () => {
+        console.log('[GameSocket] 连接成功')
         this.joinRoom()
       })
 
-      this.socket.onMessage((res: any) => {
-        this.handleMessage(res.data)
+      this.socket.on('disconnect', (reason) => {
+        console.log('[GameSocket] 连接断开:', reason)
+        if (!this.isManualDisconnect) {
+          console.log('[GameSocket] 将尝试重新连接...')
+        }
       })
 
-      this.socket.onError((err: any) => {
-        console.error('[WebSocket] 错误:', err)
+      this.socket.on('connect_error', (error) => {
+        console.error('[GameSocket] 连接错误:', error)
       })
 
-      this.socket.onClose(() => {
-        console.log('[WebSocket] 连接关闭')
-        this.isConnected = false
-        this.scheduleReconnect()
+      // 监听所有服务器事件
+      const events = ['roomState', 'memberJoined', 'memberLeft', 'pointsUpdated', 'roundCompleted', 'gameEnded']
+      events.forEach(event => {
+        this.socket?.on(event, (data: any) => {
+          console.log(`[GameSocket] 收到事件: ${event}`, data)
+          const handlers = this.messageHandlers.get(event) || []
+          handlers.forEach(handler => handler(data))
+        })
       })
+
     } catch (err) {
-      console.error('[WebSocket] 创建连接失败:', err)
+      console.error('[GameSocket] 创建连接失败:', err)
     }
   }
 
   // 加入房间
   private joinRoom() {
-    this.send('joinRoom', {
-      roomId: this.roomId,
-      memberId: this.memberId,
-      memberName: this.memberName,
-      userId: this.userId
+    if (!this.socket || !this.config) return
+    
+    this.socket.emit('joinRoom', {
+      roomId: this.config.roomId,
+      memberId: this.config.memberId,
+      memberName: this.config.memberName,
+      userId: this.config.userId
+    }, (response: any) => {
+      console.log('[GameSocket] joinRoom 响应:', response)
     })
   }
 
   // 发送消息
   send(event: string, data: any) {
-    if (this.socket && this.isConnected) {
-      const message = JSON.stringify({ event, data })
-      try {
-        // H5 原生 WebSocket
-        if (this.socket.send instanceof Function) {
-          this.socket.send(message)
-        }
-      } catch (err) {
-        console.error('[WebSocket] 发送消息失败:', err)
-      }
-    } else {
-      console.warn('[WebSocket] 未连接，无法发送消息')
+    if (!this.socket?.connected) {
+      console.warn('[GameSocket] 未连接，无法发送消息')
+      return
     }
-  }
 
-  // 处理消息
-  private handleMessage(data: string) {
-    try {
-      const message = JSON.parse(data)
-      console.log('[WebSocket] 收到消息:', message.type, message.data)
-      
-      const handlers = this.messageHandlers.get(message.type) || []
-      handlers.forEach(handler => handler(message.data))
-    } catch (err) {
-      console.error('[WebSocket] 解析消息失败:', err)
-    }
+    console.log(`[GameSocket] 发送事件: ${event}`, data)
+    this.socket.emit(event, data, (response: any) => {
+      console.log(`[GameSocket] ${event} 响应:`, response)
+    })
   }
 
   // 注册消息处理器
-  on(event: string, handler: Function) {
+  on(event: string, handler: MessageHandler) {
     if (!this.messageHandlers.has(event)) {
       this.messageHandlers.set(event, [])
     }
@@ -177,7 +131,7 @@ class GameSocket {
   }
 
   // 移除消息处理器
-  off(event: string, handler?: Function) {
+  off(event: string, handler?: MessageHandler) {
     if (handler) {
       const handlers = this.messageHandlers.get(event) || []
       const index = handlers.indexOf(handler)
@@ -191,94 +145,26 @@ class GameSocket {
 
   // 断开连接
   disconnect() {
+    this.isManualDisconnect = true
+    
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
 
     if (this.socket) {
-      this.send('leaveRoom', { roomId: this.roomId })
-
-      try {
-        const env = Taro.getEnv()
-        if (env === Taro.ENV_TYPE.WEB) {
-          // H5 环境使用原生 WebSocket close
-          if (this.socket.close instanceof Function) {
-            this.socket.close()
-          }
-        } else {
-          // 小程序环境使用 Taro API
-          Taro.closeSocket({
-            success: () => {
-              console.log('[WebSocket] 主动关闭连接')
-            }
-          })
-        }
-      } catch (err) {
-        console.error('[WebSocket] 关闭连接失败:', err)
-      }
-
+      this.send('leaveRoom', { roomId: this.config?.roomId })
+      this.socket.disconnect()
       this.socket = null
-      this.isConnected = false
     }
   }
 
-  // 发送积分更新
-  emitPointUpdate(data: {
-    roomId: string
-    fromMemberId: string
-    toMemberId: string
-    points: number
-    fromMemberName: string
-    toMemberName: string
-    currentMembers: any[]
-  }) {
-    this.send('pointUpdate', data)
-  }
-
-  // 发送回合完成
-  emitRoundComplete(data: {
-    roomId: string
-    members: any[]
-    roundNumber: number
-  }) {
-    this.send('roundComplete', data)
-  }
-
-  // 发送游戏结束
-  emitGameEnd(data: {
-    roomId: string
-    finalMembers: any[]
-    roomName: string
-  }) {
-    this.send('gameEnd', data)
-  }
-
-  // 定时重连
-  private scheduleReconnect() {
-    if (this.reconnectTimer) {
-      return
-    }
-
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      if (this.roomId && this.memberId) {
-        console.log('[WebSocket] 尝试重连...')
-        this.connect({
-          roomId: this.roomId,
-          memberId: this.memberId,
-          memberName: this.memberName,
-          userId: this.userId
-        })
-      }
-    }, 3000)
-  }
-
-  // 检查是否已连接
-  isSocketConnected() {
-    return this.isConnected
+  // 是否已连接
+  isConnected(): boolean {
+    return this.socket?.connected || false
   }
 }
 
 // 导出单例
 export const gameSocket = new GameSocket()
+export default gameSocket
