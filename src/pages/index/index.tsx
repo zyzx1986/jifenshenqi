@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react'
 import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro'
 import { View, Text, ScrollView } from '@tarojs/components'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { ShareButton } from '@/components/ui/share-button'
+import { Input } from '@/components/ui/input'
 import { Network } from '@/network'
-import { 
-  Users, ArrowLeft, Gift, Crown, RefreshCw
-} from 'lucide-react-taro'
+import { Users, Gift, Crown, RefreshCw, Plus, LogIn } from 'lucide-react-taro'
 import { useGroupStore } from '@/stores/group'
 import { gameSocket } from '@/utils/gameSocket'
 import './index.scss'
@@ -22,7 +19,6 @@ export default function Index() {
     setCurrentGroup,
     setMembers,
     setCurrentMember,
-    clear
   } = useGroupStore()
   
   const [givePoints, setGivePoints] = useState('')
@@ -32,32 +28,20 @@ export default function Index() {
   const [connected, setConnected] = useState(false)
   const [showRecovery, setShowRecovery] = useState(false)
   const [recovering, setRecovering] = useState(false)
-  const [autoJoining, setAutoJoining] = useState(false)
 
-  // 随机房间名称库
-  const roomNamePrefixes = ['快乐', '开心', '幸运', '阳光', '彩虹', '星空', '梦想', '奇迹', '冒险', '自由']
-  const roomNameSuffixes = ['小屋', '城堡', '星球', '花园', '乐园', '俱乐部', '工坊', '基地', '部落', '联盟']
-  
-  // 生成随机房间名称
-  const generateRandomRoomName = () => {
-    const prefix = roomNamePrefixes[Math.floor(Math.random() * roomNamePrefixes.length)]
-    const suffix = roomNameSuffixes[Math.floor(Math.random() * roomNameSuffixes.length)]
-    const number = Math.floor(Math.random() * 100).toString().padStart(2, '0')
-    return `${prefix}${suffix}${number}`
-  }
-
+  // 判断是否有房间
+  const hasRoom = !!currentGroup
 
   // 加载成员列表
   const loadMembers = async () => {
-    const savedGroup = Taro.getStorageSync('currentGroup')
-    if (!savedGroup) return
+    if (!currentGroup) return
     
     try {
       const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/groups/members',
         method: 'GET',
-        data: { group_id: savedGroup.id },
+        data: { group_id: currentGroup.id },
         header: token ? { Authorization: `Bearer ${token}` } : {}
       })
       
@@ -80,183 +64,21 @@ export default function Index() {
     }
     if (savedMember && !currentMember) {
       setCurrentMember(savedMember)
-      // 确保当前成员也在成员列表中
-      const existingMembers = useGroupStore.getState().members
-      if (!existingMembers.find((m: any) => m.id === savedMember.id)) {
-        setMembers([savedMember, ...existingMembers])
-      }
     }
   }, [])
 
-  // 获取微信昵称
-  const fetchWechatNickname = async (): Promise<string> => {
-    const cached = Taro.getStorageSync('wechatNickname')
-    if (cached) return cached
-    
-    return new Promise<string>((resolve) => {
-      // 小程序环境使用 Taro.getUserProfile
-      if (Taro.getEnv() === 'WEAPP' && Taro.canIUse('getUserProfile')) {
-        Taro.getUserProfile({
-          desc: '用于设置房间昵称',
-          success: (res) => {
-            const nickname = res.userInfo?.nickName || ''
-            if (nickname) {
-              Taro.setStorageSync('wechatNickname', nickname)
-            }
-            resolve(nickname)
-          },
-          fail: () => resolve('')
-        })
-      } else {
-        resolve('')
-      }
-    })
-  }
-
-  // 自动创建房间
-  const autoCreateRoom = async () => {
-    if (autoJoining) return
-    setAutoJoining(true)
-    
-    try {
-      // 获取微信昵称
-      let nickname = Taro.getStorageSync('wechatNickname')
-      if (!nickname) {
-        nickname = await fetchWechatNickname()
-      }
-      if (!nickname) {
-        nickname = `用户${Date.now().toString(36).slice(-6)}`
-      }
-      const token = Taro.getStorageSync('token')
-      
-      const res = await Network.request({
-        url: '/api/groups/create',
-        method: 'POST',
-        data: {
-          name: generateRandomRoomName(),
-          member_name: nickname
-        },
-        header: token ? { Authorization: `Bearer ${token}` } : {}
-      })
-      
-      const result = res.data as any
-      if (result.code === 200 && result.data) {
-        const { group, member } = result.data
-        setCurrentGroup(group)
-        setMembers(group.members || [member])
-        setCurrentMember(member)
-        
-        // 连接 WebSocket
-        setTimeout(() => {
-          gameSocket.connect({
-            roomId: group.invite_code,
-            memberId: member.id,
-            memberName: member.name,
-            userId: Taro.getStorageSync('userId') || ''
-          })
-        }, 500)
-        
-        Taro.showToast({ title: '已创建房间', icon: 'none' })
-      }
-    } catch (err) {
-      console.error('自动创建房间失败:', err)
-      Taro.showToast({ title: '创建房间失败', icon: 'none' })
-    } finally {
-      setAutoJoining(false)
-    }
-  }
-
-  // 自动加入房间
-  const autoJoinRoom = async (inviteCode: string) => {
-    if (autoJoining) return
-    setAutoJoining(true)
-    
-    try {
-      // 获取微信昵称
-      let nickname = Taro.getStorageSync('wechatNickname')
-      if (!nickname) {
-        nickname = await fetchWechatNickname()
-      }
-      if (!nickname) {
-        nickname = `用户${Date.now().toString(36).slice(-6)}`
-      }
-      
-      const token = Taro.getStorageSync('token')
-      const res = await Network.request({
-        url: '/api/groups/join',
-        method: 'POST',
-        data: {
-          invite_code: inviteCode,
-          member_name: nickname
-        },
-        header: token ? { Authorization: `Bearer ${token}` } : {}
-      })
-      
-      const result = res.data as any
-      if (result.code === 200 && result.data) {
-        const { group, member } = result.data
-        setCurrentGroup(group)
-        setMembers(group.members || [member])
-        setCurrentMember(member)
-        
-        // 连接 WebSocket
-        setTimeout(() => {
-          gameSocket.connect({
-            roomId: group.invite_code,
-            memberId: member.id,
-            memberName: member.name,
-            userId: Taro.getStorageSync('userId') || ''
-          })
-        }, 500)
-        
-        Taro.showToast({ title: '已加入房间', icon: 'none' })
-      } else {
-        Taro.showToast({ title: result.msg || '加入房间失败', icon: 'none' })
-      }
-    } catch (err) {
-      console.error('自动加入房间失败:', err)
-      Taro.showToast({ title: '加入房间失败', icon: 'none' })
-    } finally {
-      setAutoJoining(false)
-    }
-  }
-
-  // 页面显示时检查URL参数或自动创建房间
+  // 页面显示时检查是否有房间
   useDidShow(() => {
-    // 优先使用 Taro.getCurrentInstance 获取启动参数（从分享链接进入时）
-    const instance = Taro.getCurrentInstance()
-    const launchData = instance.router?.params || {}
-    
-    // 检查是否有邀请码参数
-    const inviteCode = launchData.invite_code
-    
-    console.log('[Index] useDidShow - 启动参数:', launchData, '邀请码:', inviteCode)
-    
-    if (inviteCode) {
-      // 有邀请码，优先处理加入房间
-      // 清除旧的房间数据，确保加入新房间
-      clear()
-      setTimeout(() => {
-        autoJoinRoom(inviteCode)
-      }, 100)
-      return
-    }
-    
-    // 没有邀请码，检查本地存储的房间信息
     const savedGroup = Taro.getStorageSync('currentGroup')
     
-    // 如果有保存的房间信息，加载成员列表
     if (savedGroup) {
       if (!currentGroup) {
         setCurrentGroup(savedGroup)
       }
       loadMembers()
       checkRecovery()
-      return
+      connectWebSocket()
     }
-    
-    // 没有房间也没有邀请码，自动创建房间
-    autoCreateRoom()
   })
 
   // 检查是否需要恢复对局
@@ -273,7 +95,6 @@ export default function Index() {
       
       const result = res.data as any
       if (result.code === 200 && result.data && currentGroup.invite_code === result.data.inviteCode) {
-        // 找到进行中的对局，显示恢复提示
         setShowRecovery(true)
       }
     } catch (err) {
@@ -296,10 +117,7 @@ export default function Index() {
       
       const result = res.data as any
       if (result.code === 200 && result.data) {
-        // 恢复成功，更新成员数据
         setMembers(result.data.members || [])
-        
-        // 连接 WebSocket
         connectWebSocket()
       } else {
         Taro.showToast({ title: '未找到进行中的对局', icon: 'none' })
@@ -318,155 +136,89 @@ export default function Index() {
     setShowRecovery(false)
   }
 
-  // 连接 WebSocket
-  const connectWebSocket = () => {
-    if (!currentGroup || !currentMember?.id) return
-    
-    // 获取当前用户信息
-    const myMember = members.find(m => m.id === currentMember?.id)
-    
-    gameSocket.connect({
-      roomId: currentGroup.invite_code,
-      memberId: currentMember?.id,
-      memberName: myMember?.name || currentMember?.name || '未知',
-      userId: Taro.getStorageSync('userId') || ''
-    })
-    
-    // 监听分数更新
-    gameSocket.on('pointsUpdated', (data: any) => {
-      console.log('收到分数更新:', data)
-      setMembers(data.members)
-      
-      // 如果是自己操作的，显示提示
-      if (data.fromMemberId === currentMember?.id) {
-        Taro.vibrateShort?.({ type: 'light' })
-      }
-    })
-    
-    // 监听成员加入
-    gameSocket.on('memberJoined', (data: any) => {
-      console.log('成员加入:', data)
-      setMembers(data.members)
-      Taro.showToast({ 
-        title: `${data.memberName} 加入了房间`, 
-        icon: 'none',
-        duration: 2000 
-      })
-    })
-    
-    // 监听成员离开
-    gameSocket.on('memberLeft', (data: any) => {
-      console.log('成员离开:', data)
-      // 从列表中移除
-      setMembers(members.filter(m => m.id !== data.memberId))
-      Taro.showToast({ 
-        title: `${data.memberName} 离开了房间`, 
-        icon: 'none',
-        duration: 2000 
-      })
-    })
-    
-    // 监听回合完成
-    gameSocket.on('roundCompleted', (data: any) => {
-      console.log('回合完成:', data)
-      setMembers(data.members)
-    })
-    
-    setConnected(true)
+  // 跳转去创建/加入房间
+  const goToJoinPage = () => {
+    Taro.navigateTo({ url: '/pages/join/index' })
   }
 
-  // 组件卸载时断开连接
-  useEffect(() => {
-    return () => {
-      if (currentGroup) {
-        gameSocket.off('pointsUpdated')
-        gameSocket.off('memberJoined')
-        gameSocket.off('memberLeft')
-        gameSocket.off('roundCompleted')
-      }
-    }
-  }, [])
+  // 连接 WebSocket
+  const connectWebSocket = () => {
+    if (!currentGroup || !currentMember) return
+    
+    setConnected(true)
+    gameSocket.connect({
+      roomId: currentGroup.invite_code,
+      memberId: currentMember.id,
+      memberName: currentMember.name,
+      userId: Taro.getStorageSync('userId') || ''
+    })
+  }
 
-  // 页面显示时连接 WebSocket
-  useEffect(() => {
-    if (currentGroup && currentMember?.id && members.length > 0) {
-      connectWebSocket()
+  // 分享给好友
+  useShareAppMessage(() => {
+    if (!currentGroup) {
+      return {
+        title: '积分互赠小程序',
+        path: '/pages/join/index',
+        imageUrl: ''
+      }
     }
     
-    return () => {
-      if (currentGroup) {
-        gameSocket.disconnect()
-        setConnected(false)
-      }
+    return {
+      title: `${currentMember?.name || '我'}邀请你加入「${currentGroup.name}」`,
+      path: `/pages/join/index?invite_code=${currentGroup.invite_code}`,
+      imageUrl: ''
     }
-  }, [currentGroup, currentMember?.id])
+  })
 
-
-
-  // 初始化加载
-  useEffect(() => {
-    if (currentGroup) {
-      loadMembers()
-    }
-  }, [currentGroup])
-
-  // 选择给分对象
-  const handleSelectMember = (member: any) => {
+  // 给分
+  const handleGivePoints = async (member: any) => {
     if (member.id === currentMember?.id) {
       Taro.showToast({ title: '不能给自己给分', icon: 'none' })
       return
     }
+    
     setSelectedMember(member)
     setShowGivePanel(true)
   }
 
-  // 给分
-  const handleGivePoints = async () => {
+  // 确认给分
+  const handleConfirmGive = async () => {
     if (!selectedMember || !givePoints || !currentGroup) return
     
-    const points = parseInt(givePoints)
+    const points = parseInt(givePoints, 10)
     if (Number.isNaN(points) || points <= 0) {
-      Taro.showToast({ title: '请输入有效分数', icon: 'none' })
+      Taro.showToast({ title: '请输入有效的积分', icon: 'none' })
       return
     }
     
     setGiving(true)
     try {
       const token = Taro.getStorageSync('token')
-      
       const res = await Network.request({
-        url: '/api/points/give',
+        url: '/api/members/points/give',
         method: 'POST',
         data: {
           group_id: currentGroup.id,
           from_member_id: currentMember?.id,
           to_member_id: selectedMember.id,
-          points: Number(points) || 0,
-          reason: ''
+          points: points
         },
         header: token ? { Authorization: `Bearer ${token}` } : {}
       })
       
       const result = res.data as any
+      console.log('给分响应:', result)
+      
       if (result.code === 200) {
-        // 通过 WebSocket 广播给所有成员
-        const updatedMembers = result.data.members
-        gameSocket.emitPointUpdate({
-          roomId: currentGroup.invite_code,
-          fromMemberId: currentMember?.id || '',
-          toMemberId: selectedMember.id,
-          points: points,
-          fromMemberName: currentMember?.name || '',
-          toMemberName: selectedMember.name,
-          currentMembers: updatedMembers
-        })
-        
-        // 更新本地数据
-        setMembers(updatedMembers)
-        Taro.vibrateShort?.({ type: 'medium' })
+        Taro.showToast({ title: `已赠送${points}积分`, icon: 'none' })
         setShowGivePanel(false)
         setGivePoints('')
         setSelectedMember(null)
+        
+        if (result.data) {
+          setMembers(result.data)
+        }
       } else {
         Taro.showToast({ title: result.msg || '给分失败', icon: 'none' })
       }
@@ -478,235 +230,125 @@ export default function Index() {
     }
   }
 
-  // 分享配置
-  useShareAppMessage(() => {
-    const groupToShare = currentGroup
-    if (!groupToShare) return {
-      title: '加入我的积分房间',
-      path: '/pages/join/index'
-    }
-    
-    return {
-      title: `${groupToShare.name} - 房号 ${groupToShare.invite_code}`,
-      path: `/pages/join/index?invite_code=${groupToShare.invite_code}`
-    }
-  })
-
-  // 退出房间
-  const handleExit = () => {
-    Taro.showModal({
-      title: '提示',
-      content: '确定要退出当前房间吗？',
-      success: (res) => {
-        if (res.confirm) {
-          gameSocket.disconnect()
-          clear()
-          Taro.reLaunch({ url: '/pages/join/index' })
-        }
-      }
-    })
-  }
-
-  // 获取领先者
-  const getLeader = () => {
-    if (members.length === 0) return null
-    return [...members].sort((a, b) => b.total_points - a.total_points)[0]
-  }
-
-  // 如果没有加入房间，显示加载状态
-  if (!currentGroup) {
-    return (
-      <View className="index-page min-h-screen bg-gray-50">
-        <View className="flex flex-col items-center justify-center h-screen px-6">
-          <View className="text-center">
-            <View className="w-24 h-24 mx-auto mb-6 rounded-full bg-blue-100 flex items-center justify-center">
-              <Users size={48} color="#1890ff" />
-            </View>
-            <Text className="block text-xl font-semibold text-gray-800 mb-2">
-              {autoJoining ? '正在进入房间...' : '正在初始化...'}
-            </Text>
-            <Text className="block text-sm text-gray-500">
-              {autoJoining ? '请稍候' : '即将自动创建房间'}
-            </Text>
-          </View>
-        </View>
+  // 渲染空状态（没有房间）
+  const renderEmptyState = () => (
+    <View className="flex flex-col items-center justify-center min-h-screen bg-gray-50 px-6">
+      <View className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mb-6">
+        <Users size={48} color="#1890ff" />
       </View>
-    )
-  }
+      <Text className="block text-xl font-semibold text-gray-800 mb-2">
+        还没有房间
+      </Text>
+      <Text className="block text-sm text-gray-500 text-center mb-8">
+        创建房间或加入好友的房间{'\n'}开始积分互赠
+      </Text>
+      <View className="w-full max-w-xs space-y-3">
+        <Button 
+          className="w-full" 
+          onClick={goToJoinPage}
+        >
+          <Plus size={18} color="#fff" className="mr-2" />
+          <Text className="block">创建房间</Text>
+        </Button>
+        <Button 
+          variant="outline" 
+          className="w-full"
+          onClick={goToJoinPage}
+        >
+          <LogIn size={18} color="#1890ff" className="mr-2" />
+          <Text className="block">加入房间</Text>
+        </Button>
+      </View>
+    </View>
+  )
 
-  const leader = getLeader()
-
-  return (
-    <View className="index-page min-h-screen bg-gray-50 pb-safe">
-      {/* 顶部信息栏 */}
-      <View className="bg-white px-4 py-3 shadow-sm">
+  // 渲染房间成员列表
+  const renderRoomContent = () => (
+    <View className="flex flex-col min-h-screen bg-gray-50 pb-20">
+      {/* 房间信息卡片 */}
+      <View className="p-4 bg-white border-b border-gray-100">
         <View className="flex items-center justify-between">
           <View className="flex items-center">
-            <Text className="text-lg font-semibold text-gray-800">{currentGroup.name}</Text>
-            <View className="ml-3 px-2 py-1 bg-blue-50 rounded text-xs text-blue-600">
-              房号: {currentGroup.invite_code}
+            <View className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mr-3">
+              <Text className="block text-white font-bold text-lg">
+                {currentGroup?.name?.charAt(0) || '房'}
+              </Text>
             </View>
-            {connected && (
-              <View className="ml-2 flex items-center">
-                <View className="w-2 h-2 rounded-full bg-green-500" />
-                <Text className="text-xs text-green-600 ml-1">在线</Text>
-              </View>
-            )}
+            <View>
+              <Text className="block text-lg font-semibold text-gray-800">
+                {currentGroup?.name || '房间'}
+              </Text>
+              <Text className="block text-xs text-gray-400">
+                邀请码: {currentGroup?.invite_code || '-'}
+              </Text>
+            </View>
           </View>
-          <Button variant="ghost" size="sm" onClick={handleExit}>
-            <ArrowLeft size={16} color="#666" />
-            <Text className="ml-1">退出</Text>
-          </Button>
+          <View className="flex items-center">
+            <View className={`w-2 h-2 rounded-full mr-2 ${connected ? 'bg-green-500' : 'bg-gray-300'}`} />
+            <Text className="block text-xs text-gray-400">
+              {connected ? '已连接' : '未连接'}
+            </Text>
+          </View>
         </View>
         
-        {/* 房间统计 */}
-        <View className="flex items-center justify-around mt-3 pt-3 border-t border-gray-100">
-          <View className="text-center">
-            <Text className="block text-lg font-semibold text-blue-600">{members.length}</Text>
-            <Text className="block text-xs text-gray-500">参与人数</Text>
-          </View>
-          <View className="text-center">
-            <Text className="block text-lg font-semibold text-orange-600">
-              {members.reduce((sum, m) => sum + (m.total_given || 0), 0)}
-            </Text>
-            <Text className="block text-xs text-gray-500">总给分数</Text>
-          </View>
-          <View className="text-center">
-            <Text className="block text-lg font-semibold text-purple-600">
-              {members.reduce((sum, m) => sum + (m.received_count || 0), 0)}
-            </Text>
-            <Text className="block text-xs text-gray-500">给分次数</Text>
-          </View>
-        </View>
+        {/* 分享按钮 */}
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="w-full mt-4"
+          onClick={() => {
+            Taro.showShareMenu({ withShareTicket: true })
+            Taro.showToast({ title: '请点击右上角分享', icon: 'none' })
+          }}
+        >
+          <Text className="block">邀请好友加入</Text>
+        </Button>
       </View>
 
-      {/* 领先者提示 */}
-      {leader && leader.id === currentMember?.id && (
-        <View className="mx-4 mt-3 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
-          <View className="flex items-center">
-            <Crown size={20} color="#f59e0b" />
-            <Text className="ml-2 text-sm font-medium text-orange-700">
-              你当前领先！继续保持！
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* 恢复对局提示 */}
-      {showRecovery && (
-        <View className="mx-4 mt-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <View className="flex items-center justify-between">
-            <View className="flex items-center">
-              <RefreshCw size={20} color="#1890ff" />
-              <Text className="ml-2 text-sm text-blue-700">检测到未完成的对局</Text>
-            </View>
-            <View className="flex">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="mr-2"
-                onClick={handleNewGame}
-                disabled={recovering}
-              >
-                <Text className="text-sm">新对局</Text>
-              </Button>
-              <Button 
-                size="sm" 
-                onClick={handleRecoverSession}
-              >
-                <Text className="text-white text-sm">{recovering ? '恢复中...' : '恢复'}</Text>
-              </Button>
-            </View>
-          </View>
-        </View>
-      )}
-
       {/* 成员列表 */}
-      <ScrollView scrollY className="flex-1 px-4 py-3" style={{ height: 'calc(100vh - 280px)' }}>
+      <ScrollView scrollY className="flex-1 px-4 py-4">
         <View className="space-y-3">
-          {members.map((member, index) => (
-            <Card 
-              key={member.id} 
-              className={`${member.id === currentMember?.id ? 'border-blue-300 bg-blue-50' : ''}`}
-            >
+          {members.map((member: any) => (
+            <Card key={member.id} className="overflow-hidden">
               <CardContent className="p-4">
-                <View className="flex items-center justify-between">
-                  <View className="flex items-center flex-1">
-                    {/* 排名 */}
-                    {index < 3 ? (
-                      <View className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                        index === 0 ? 'bg-yellow-100' : index === 1 ? 'bg-gray-100' : 'bg-orange-100'
-                      }`}
-                      >
-                        <Text className={`text-sm font-bold ${
-                          index === 0 ? 'text-yellow-600' : index === 1 ? 'text-gray-600' : 'text-orange-600'
-                        }`}
-                        >
-                          {index + 1}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3">
-                        <Text className="text-sm font-medium text-gray-500">{index + 1}</Text>
-                      </View>
-                    )}
-                    
-                    {/* 用户信息 */}
-                    <Avatar 
-                      className="mr-3"
-                     
-                    >
-                      <AvatarFallback className={`${
-                        member.id === currentMember?.id ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'
-                      }`}
-                      >
-                        {member.name?.charAt(0)?.toUpperCase() || '?'}
-                      </AvatarFallback>
-                    </Avatar>
-                    
-                    <View className="flex-1">
-                      <View className="flex items-center">
-                        <Text className="text-base font-medium text-gray-800">
-                          {member.name}
-                        </Text>
-                        {member.id === currentMember?.id && (
-                          <Text className="ml-2 text-xs text-blue-600">(我)</Text>
-                        )}
-                        {member.isHost && (
-                          <View className="ml-2 px-2 py-1 bg-orange-100 rounded text-xs text-orange-600">
-                            房主
-                          </View>
-                        )}
-                      </View>
-                      <Text className="text-xs text-gray-500 mt-1">
-                        给过 {member.total_given || 0} 分 · 收到 {member.total_received || 0} 分
+                <View className="flex items-center">
+                  <Avatar className="w-12 h-12 mr-3">
+                    <AvatarFallback className="bg-blue-100 text-blue-600">
+                      <Text className="block text-lg font-semibold">
+                        {member.name?.charAt(0) || member.name?.slice(0, 2) || '?'}
                       </Text>
+                    </AvatarFallback>
+                  </Avatar>
+                  
+                  <View className="flex-1">
+                    <View className="flex items-center">
+                      <Text className="block text-base font-medium text-gray-800">
+                        {member.name}
+                      </Text>
+                      {member.id === currentMember?.id && (
+                        <View className="ml-2 px-2 py-1 bg-blue-100 rounded text-xs text-blue-600">
+                          我
+                        </View>
+                      )}
+                      {member.is_creator && (
+                        <Crown size={14} color="#f59e0b" className="ml-1" />
+                      )}
                     </View>
+                    <Text className="block text-sm text-gray-400 mt-1">
+                      积分: {member.total_points || 0}
+                    </Text>
                   </View>
                   
-                  {/* 积分和给分按钮 */}
-                  <View className="flex items-center">
-                    <View className="text-right mr-3">
-                      <Text className={`text-xl font-bold ${
-                        member.id === currentMember?.id ? 'text-blue-600' : 'text-orange-600'
-                      }`}
-                      >
-                        {member.total_points}
-                      </Text>
-                      <Text className="text-xs text-gray-500">积分</Text>
-                    </View>
-                    
-                    {member.id !== currentMember?.id && (
-                      <Button 
-                        size="sm" 
-                        onClick={() => handleSelectMember(member)}
-                        disabled={giving}
-                      >
-                        <Gift size={14} color="#666" />
-                        <Text className="ml-1 text-white">送分</Text>
-                      </Button>
-                    )}
-                  </View>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    className="flex items-center"
+                    onClick={() => handleGivePoints(member)}
+                    disabled={member.id === currentMember?.id}
+                  >
+                    <Gift size={14} color="#1890ff" className="mr-1" />
+                    <Text className="block text-sm">送积分</Text>
+                  </Button>
                 </View>
               </CardContent>
             </Card>
@@ -714,46 +356,84 @@ export default function Index() {
         </View>
       </ScrollView>
 
-      {/* 底部分享按钮 */}
-      <View className="px-4 py-3 bg-white border-t border-gray-200">
-        <ShareButton className="w-full">
-          <Users size={18} color="#666" />
-          <Text className="ml-2">邀请好友加入房间</Text>
-        </ShareButton>
-      </View>
+      {/* 恢复对局提示 */}
+      {showRecovery && (
+        <View className="fixed bottom-20 left-4 right-4 bg-white rounded-xl shadow-lg p-4 z-50">
+          <Text className="block text-sm text-gray-600 mb-3">
+            检测到有进行中的对局，是否恢复？
+          </Text>
+          <View className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1"
+              onClick={handleNewGame}
+            >
+              <Text className="block">新对局</Text>
+            </Button>
+            <Button 
+              size="sm" 
+              className="flex-1"
+              onClick={handleRecoverSession}
+              disabled={recovering}
+            >
+              <RefreshCw size={14} color="#fff" className="mr-1" />
+              <Text className="block">{recovering ? '恢复中...' : '恢复对局'}</Text>
+            </Button>
+          </View>
+        </View>
+      )}
 
-      {/* 给分弹框 */}
+      {/* 给分弹窗 */}
       {showGivePanel && selectedMember && (
         <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
           <View className="bg-white rounded-2xl w-full max-w-sm p-6">
-            <Text className="block text-lg font-semibold text-gray-800 text-center mb-4">
-              给 {selectedMember.name} 送分
+            <Text className="block text-lg font-semibold text-gray-800 text-center mb-1">
+              赠送积分
+            </Text>
+            <Text className="block text-sm text-gray-500 text-center mb-6">
+              送给 {selectedMember.name}
             </Text>
             
+            {/* 积分输入 */}
+            <View className="bg-gray-50 rounded-xl px-4 py-3 mb-4">
+              <Text className="block text-xs text-gray-400 mb-1">积分</Text>
+              <Text className="block text-3xl font-bold text-blue-600">
+                {givePoints || '0'}
+              </Text>
+              <Text className="block text-xs text-gray-400 mt-2">
+                当前积分: {currentMember?.total_points || 0}
+              </Text>
+            </View>
+            
+            {/* 输入框 */}
             <View className="bg-gray-50 rounded-xl px-4 py-3 mb-4">
               <Input
                 type="number"
-                placeholder="输入积分数量"
+                placeholder="输入积分"
                 value={givePoints}
-                onInput={(e: any) => setGivePoints(e.detail.value)}
-                className="w-full text-center text-2xl font-bold"
-                focus
+                onInput={(e: any) => setGivePoints(e.detail.value || '')}
+                className="w-full bg-transparent text-lg"
               />
             </View>
             
-            <View className="flex gap-3 mb-4">
-              {[1, 5, 10, 20].map(num => (
-                <View 
-                  key={num}
-                  className="flex-1 py-2 text-center bg-blue-50 rounded-lg"
-                  onClick={() => setGivePoints(num.toString())}
-                >
-                  <Text className="text-blue-600 font-medium">{num}</Text>
+            {/* 快捷金额按钮 */}
+            <View className="flex flex-row gap-2 mb-4">
+              {[1, 5, 10, 20].map((amount) => (
+                <View key={amount} className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setGivePoints(amount.toString())}
+                  >
+                    <Text className="block">{amount}</Text>
+                  </Button>
                 </View>
               ))}
             </View>
             
-            <View className="flex gap-3">
+            <View className="flex flex-row gap-3">
               <Button 
                 variant="outline" 
                 className="flex-1"
@@ -763,21 +443,21 @@ export default function Index() {
                   setSelectedMember(null)
                 }}
               >
-                <Text>取消</Text>
+                <Text className="block">取消</Text>
               </Button>
               <Button 
                 className="flex-1"
-                onClick={handleGivePoints}
+                onClick={handleConfirmGive}
                 disabled={giving || !givePoints}
               >
-                <Text className="text-white">{giving ? '给分中...' : '确认'}</Text>
+                <Text className="block">{giving ? '赠送中...' : '确认赠送'}</Text>
               </Button>
             </View>
           </View>
         </View>
       )}
-
-
     </View>
   )
+
+  return hasRoom ? renderRoomContent() : renderEmptyState()
 }

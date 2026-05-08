@@ -1,41 +1,34 @@
-import { View, Text, Image } from '@tarojs/components'
-import Taro, { useDidShow, showToast, switchTab, useShareAppMessage } from '@tarojs/taro'
+import { View, Text } from '@tarojs/components'
+import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { ShareButton } from '@/components/ui/share-button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useGroupStore } from '@/stores/group'
 import { Network } from '@/network'
+import { Users, Copy, Check, RefreshCw } from 'lucide-react-taro'
 
 const JoinPage = () => {
-  const { setCurrentGroup, setCurrentMember } = useGroupStore()
-  const [activeTab, setActiveTab] = useState<'join' | 'create'>('join')
+  const { setCurrentGroup, setCurrentMember, setMembers } = useGroupStore()
+  const [activeTab, setActiveTab] = useState<'join' | 'create'>('create')
   const [groupName, setGroupName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const [memberName, setMemberName] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showQRCode, setShowQRCode] = useState(false)
-  const [userId, setUserId] = useState('')
-  const [qrCodeUrl, setQrCodeUrl] = useState('')
-  const [currentGroup, setCurrentGroupLocal] = useState<any>(null)
-  const [autoJoinLoading, setAutoJoinLoading] = useState(false)
-  const [showAutoJoin, setShowAutoJoin] = useState(false)
-  const [hasAutoJoined, setHasAutoJoined] = useState(false)
+  const [createdGroup, setCreatedGroup] = useState<any>(null)
+  const [copied, setCopied] = useState(false)
 
   // 获取微信昵称作为默认昵称
-  const fetchWechatNickname = async () => {
+  const fetchWechatNickname = async (): Promise<string> => {
     return new Promise<string>((resolve) => {
-      // 尝试从本地存储获取缓存的昵称
       const cachedNickname = Taro.getStorageSync('wechatNickname')
       if (cachedNickname) {
         resolve(cachedNickname)
         return
       }
 
-      // 小程序环境使用 Taro.getUserProfile
       if (Taro.getEnv() === 'WEAPP' && Taro.canIUse('getUserProfile')) {
         Taro.getUserProfile({
           desc: '用于设置房间昵称',
@@ -54,97 +47,28 @@ const JoinPage = () => {
     })
   }
 
-  // 获取页面路径参数（分享链接带来的invite_code）
+  // 页面加载时获取昵称
   useEffect(() => {
-    const app = Taro.getApp()
-    if (app && (app as any).onAppRoute) {
-      (app as any).onAppRoute((route: string) => {
-        if (route.includes('join')) {
-          // 延迟获取参数，确保参数已经传递
-          setTimeout(() => {
-            const pages = Taro.getCurrentPages()
-            const currentPage = pages[pages.length - 1]
-            if (currentPage) {
-              const options = (currentPage as any).options || (currentPage as any).$taroOptions || {}
-              console.log('页面参数:', options)
-              if (options.invite_code && options.invite_code !== 'undefined') {
-                setInviteCode(options.invite_code)
-                setActiveTab('join')
-                // 自动触发加入
-                if (memberName) {
-                  handleJoinGroup(options.invite_code)
-                } else {
-                  // 等昵称获取后自动加入
-                  setShowAutoJoin(true)
-                }
-              }
-            }
-          }, 500)
-        }
-      })
-    }
-  }, [memberName])
-
-  // 页面加载时获取微信昵称和初始化用户ID
-  useEffect(() => {
-    // 初始化或获取用户ID
-    let storedUserId = Taro.getStorageSync('userId')
-    if (!storedUserId) {
-      storedUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      Taro.setStorageSync('userId', storedUserId)
-    }
-    setUserId(storedUserId)
-
-    // 页面加载时尝试获取昵称
     const cachedNickname = Taro.getStorageSync('wechatNickname')
     if (cachedNickname) {
       setMemberName(cachedNickname)
-    } else {
-      // 静默获取昵称，不弹窗
-      fetchWechatNickname().then((nickname) => {
-        if (nickname) {
-          setMemberName(nickname)
-        }
-      })
     }
-    
-    // 立即检查分享参数
-    setTimeout(() => {
-      const pages = Taro.getCurrentPages()
-      const currentPage = pages[pages.length - 1]
-      if (currentPage) {
-        const options = (currentPage as any).options || {}
-        if (options.invite_code && options.invite_code !== 'undefined') {
-          setInviteCode(options.invite_code)
-          setActiveTab('join')
-          // 如果昵称已有，直接加入
-          const savedNickname = Taro.getStorageSync('wechatNickname')
-          if (savedNickname) {
-            setMemberName(savedNickname)
-            setTimeout(() => handleJoinGroup(options.invite_code), 300)
-          } else {
-            setShowAutoJoin(true)
-          }
-        }
-      }
-    }, 100)
   }, [])
 
   // 开房
-  const createGroup = async () => {
+  const handleCreateGroup = async () => {
     if (!groupName.trim()) {
-      showToast({ title: '请输入房间名称', icon: 'none' })
+      Taro.showToast({ title: '请输入房间名称', icon: 'none' })
       return
     }
 
     setLoading(true)
     try {
-      // 如果没有输入昵称，自动获取微信昵称
       let nickname = memberName.trim()
       if (!nickname) {
         nickname = await fetchWechatNickname()
         if (!nickname) {
-          showToast({ title: '请输入您的昵称', icon: 'none' })
+          Taro.showToast({ title: '请输入您的昵称', icon: 'none' })
           setLoading(false)
           return
         }
@@ -152,6 +76,12 @@ const JoinPage = () => {
       }
 
       const token = Taro.getStorageSync('token')
+      let userId = Taro.getStorageSync('userId')
+      if (!userId) {
+        userId = `user_${Date.now()}`
+        Taro.setStorageSync('userId', userId)
+      }
+
       const res = await Network.request({
         url: '/api/groups/create',
         method: 'POST',
@@ -165,91 +95,42 @@ const JoinPage = () => {
 
       console.log('开房响应:', res.data)
 
-      const responseData = res.data?.data || res.data
-      const group = responseData?.group
-      const member = responseData?.member
-
-      console.log('解析后的群组:', group, '成员:', member)
-
-      if (group && member) {
+      const result = res.data as any
+      if (result.code === 200 && result.data) {
+        const { group, member } = result.data
         setCurrentGroup(group)
         setCurrentMember(member)
-        setCurrentGroupLocal(group)
-
-        // 同时将创建者添加到成员列表
-        const { setMembers } = useGroupStore.getState()
         setMembers([member])
-
-        // 保存到本地存储，用于分享配置
         Taro.setStorageSync('currentGroup', group)
-
-        // 保存到开房历史记录
-        try {
-          await Network.request({
-            url: '/api/groups/save-history',
-            method: 'POST',
-            data: {
-              room_name: group.name,
-              invite_code: group.invite_code,
-              user_id: userId
-            },
-            header: token ? { Authorization: `Bearer ${token}` } : {}
-          })
-          console.log('开房历史记录已保存')
-        } catch (historyError) {
-          console.error('保存开房历史失败:', historyError)
-        }
-
-        // 获取二维码
-        try {
-          const qrRes = await Network.request({
-            url: `/api/groups/qrcode?invite_code=${group.invite_code}`,
-            method: 'GET'
-          })
-
-          console.log('二维码响应:', qrRes.data)
-
-          const qrDataUrl = qrRes.data?.data?.qr_code
-          if (qrDataUrl) {
-            setQrCodeUrl(qrDataUrl)
-            console.log('二维码获取成功')
-          } else {
-            console.warn('二维码响应格式异常')
-          }
-        } catch (qrError) {
-          console.error('获取二维码失败:', qrError)
-        }
-
-        setShowQRCode(true)
-        showToast({ title: '创建成功', icon: 'success' })
+        Taro.setStorageSync('currentMember', member)
+        
+        setCreatedGroup(group)
+        Taro.showToast({ title: '创建成功', icon: 'success' })
       } else {
-        console.error('返回数据格式错误:', res.data)
-        showToast({ title: '创建失败，返回数据异常', icon: 'none' })
+        Taro.showToast({ title: result.msg || '创建失败', icon: 'none' })
       }
     } catch (error) {
       console.error('开房失败:', error)
-      showToast({ title: '创建失败，请稍后重试', icon: 'none' })
+      Taro.showToast({ title: '创建失败，请稍后重试', icon: 'none' })
     } finally {
       setLoading(false)
     }
   }
 
   // 加入房间
-  const handleJoinGroup = async (code?: string) => {
-    const targetCode = code || inviteCode
-    if (!targetCode.trim()) {
-      showToast({ title: '请输入房号', icon: 'none' })
+  const handleJoinGroup = async () => {
+    if (!inviteCode.trim()) {
+      Taro.showToast({ title: '请输入房间号', icon: 'none' })
       return
     }
 
     setLoading(true)
     try {
-      // 如果没有输入昵称，自动获取微信昵称
       let nickname = memberName.trim()
       if (!nickname) {
         nickname = await fetchWechatNickname()
         if (!nickname) {
-          showToast({ title: '请输入您的昵称', icon: 'none' })
+          Taro.showToast({ title: '请输入您的昵称', icon: 'none' })
           setLoading(false)
           return
         }
@@ -261,345 +142,256 @@ const JoinPage = () => {
         url: '/api/groups/join',
         method: 'POST',
         data: {
-          invite_code: targetCode,
-          member_name: nickname || memberName
+          invite_code: inviteCode.trim().toUpperCase(),
+          member_name: nickname
         },
         header: token ? { Authorization: `Bearer ${token}` } : {}
       })
 
       console.log('加入房间响应:', res.data)
 
-      const responseData = res.data?.data || res.data
-      const group = responseData?.group
-      const member = responseData?.member
-
-      if (group && member) {
+      const result = res.data as any
+      if (result.code === 200 && result.data) {
+        const { group, member } = result.data
         setCurrentGroup(group)
         setCurrentMember(member)
-        showToast({ title: '加入成功', icon: 'success' })
+        setMembers(group.members || [member])
+        Taro.setStorageSync('currentGroup', group)
+        Taro.setStorageSync('currentMember', member)
+        
+        Taro.showToast({ title: '加入成功', icon: 'success' })
         setTimeout(() => {
-          switchTab({ url: '/pages/index/index' })
-        }, 500)
+          Taro.switchTab({ url: '/pages/index/index' })
+        }, 1000)
       } else {
-        showToast({ title: '加入失败，请检查房号', icon: 'none' })
+        Taro.showToast({ title: result.msg || '加入失败，请检查房间号', icon: 'none' })
       }
     } catch (error: any) {
       console.error('加入房间失败:', error)
-      const errorMsg = error?.errMsg || error?.message || ''
-      if (errorMsg.includes('已经是成员')) {
-        showToast({ title: '您已经是该房间成员', icon: 'none' })
-        setTimeout(() => {
-          switchTab({ url: '/pages/index/index' })
-        }, 1000)
-      } else {
-        showToast({ title: '加入失败，请检查房号', icon: 'none' })
-      }
+      Taro.showToast({ title: '加入失败，请检查房间号', icon: 'none' })
     } finally {
       setLoading(false)
     }
   }
 
-  // 一键快速加入（使用微信昵称）
-  const quickJoin = async () => {
-    if (!inviteCode.trim()) {
-      showToast({ title: '房号无效', icon: 'none' })
-      return
-    }
-
-    setAutoJoinLoading(true)
-
-    // 先获取微信昵称
-    const nickname = await new Promise<string>((resolve) => {
-      // 优先使用缓存的昵称
-      const cachedNickname = Taro.getStorageSync('wechatNickname')
-      if (cachedNickname) {
-        resolve(cachedNickname)
-        return
-      }
-      
-      // 小程序环境使用 Taro.getUserProfile
-      if (Taro.getEnv() === 'WEAPP' && Taro.canIUse('getUserProfile')) {
-        Taro.getUserProfile({
-          desc: '用于快速加入房间',
-          success: (res) => {
-            const nick = res.userInfo?.nickName || ''
-            if (nick) {
-              Taro.setStorageSync('wechatNickname', nick)
-            }
-            resolve(nick)
-          },
-          fail: () => resolve('')
-        })
-      } else {
-        resolve('')
+  // 复制邀请码
+  const copyInviteCode = () => {
+    if (!createdGroup?.invite_code) return
+    Taro.setClipboardData({
+      data: createdGroup.invite_code,
+      success: () => {
+        setCopied(true)
+        Taro.showToast({ title: '已复制', icon: 'none' })
+        setTimeout(() => setCopied(false), 2000)
       }
     })
-
-    if (!nickname) {
-      setAutoJoinLoading(false)
-      showToast({ title: '请授权获取昵称', icon: 'none' })
-      return
-    }
-
-    setMemberName(nickname)
-
-    try {
-      const token = Taro.getStorageSync('token')
-      const res = await Network.request({
-        url: '/api/groups/join',
-        method: 'POST',
-        data: {
-          invite_code: inviteCode,
-          member_name: nickname
-        },
-        header: token ? { Authorization: `Bearer ${token}` } : {}
-      })
-
-      console.log('快速加入响应:', res.data)
-
-      const responseData = res.data?.data || res.data
-      const group = responseData?.group
-      const member = responseData?.member
-
-      if (group && member) {
-        setCurrentGroup(group)
-        setCurrentMember(member)
-        showToast({ title: '加入成功', icon: 'success' })
-        setTimeout(() => {
-          switchTab({ url: '/pages/index/index' })
-        }, 500)
-      } else {
-        showToast({ title: '加入失败，请检查房号', icon: 'none' })
-      }
-    } catch (error: any) {
-      console.error('快速加入失败:', error)
-      const errorMsg = error?.errMsg || error?.message || ''
-      if (errorMsg.includes('已经是成员')) {
-        showToast({ title: '您已经是该房间成员', icon: 'none' })
-        setTimeout(() => {
-          switchTab({ url: '/pages/index/index' })
-        }, 1000)
-      } else {
-        showToast({ title: '加入失败，请检查房号', icon: 'none' })
-      }
-    } finally {
-      setAutoJoinLoading(false)
-    }
   }
 
-  // 关闭二维码弹框
-  const handleCloseQRCode = () => {
-    setShowQRCode(false)
-    setTimeout(() => {
-      switchTab({ url: '/pages/index/index' })
-    }, 300)
+  // 返回首页
+  const goToHome = () => {
+    Taro.switchTab({ url: '/pages/index/index' })
   }
 
-  // 检查是否从分享链接进入（每次页面显示时都检查）
+  // 检测分享链接进入
   useDidShow(() => {
     const instance = Taro.getCurrentInstance()
     const params = instance.router?.params || {}
     
-    console.log('[Join] useDidShow - 检测邀请码, params:', params)
+    console.log('[Join] useDidShow - params:', params)
     
-    if (params.invite_code && !hasAutoJoined && !autoJoinLoading) {
+    if (params.invite_code && params.invite_code !== 'undefined') {
       const code = params.invite_code.toUpperCase()
-      console.log('[Join] 检测到邀请码:', code, '开始自动加入...')
-      
-      // 标记已触发
-      setHasAutoJoined(true)
-      // 设置邀请码
+      console.log('[Join] 检测到邀请码:', code)
       setInviteCode(code)
-      
-      // 清除旧数据并加入
-      useGroupStore.getState().clear()
-      setTimeout(() => {
-        quickJoin()
-      }, 100)
+      setActiveTab('join')
     }
   })
 
   // 配置分享信息
   useShareAppMessage(() => {
-    const groupToShare = currentGroup || Taro.getStorageSync('currentGroup')
-    const shareCode = groupToShare?.invite_code || ''
+    if (createdGroup) {
+      return {
+        title: `邀请你加入「${createdGroup.name}」`,
+        path: `/pages/join/index?invite_code=${createdGroup.invite_code}`,
+        imageUrl: ''
+      }
+    }
     return {
-      title: `邀请你加入房间「${groupToShare?.name || '积分管理'}」`,
-      path: `/pages/join/index?invite_code=${shareCode}`,
+      title: '积分互赠小程序',
+      path: '/pages/join/index',
       imageUrl: ''
     }
   })
 
-  return (
-    <View className="min-h-screen bg-gray-50 px-4 py-6">
-      <Text className="block text-lg font-semibold text-gray-900 mb-6">
-        加入/开房
+  // 渲染创建房间成功后的分享界面
+  const renderSharePanel = () => (
+    <View className="flex flex-col items-center px-4 py-8">
+      <View className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
+        <Users size={40} color="#22c55e" />
+      </View>
+      <Text className="block text-xl font-semibold text-gray-800 mb-2">
+        房间已创建
       </Text>
+      <Text className="block text-sm text-gray-500 mb-6">
+        {createdGroup?.name}
+      </Text>
+      
+      {/* 邀请码 */}
+      <Card className="w-full mb-6">
+        <CardContent className="p-4">
+          <Text className="block text-xs text-gray-400 mb-2">邀请码</Text>
+          <View className="flex items-center justify-between">
+            <Text className="block text-2xl font-bold text-blue-600 tracking-wider">
+              {createdGroup?.invite_code}
+            </Text>
+            <Button variant="ghost" size="sm" onClick={copyInviteCode}>
+              {copied ? <Check size={16} color="#22c55e" /> : <Copy size={16} color="#666" />}
+            </Button>
+          </View>
+        </CardContent>
+      </Card>
 
+      {/* 分享按钮 */}
+      <Button 
+        className="w-full mb-3"
+        onClick={() => {
+          Taro.showShareMenu({ withShareTicket: true })
+          Taro.showToast({ title: '请点击右上角分享', icon: 'none' })
+        }}
+      >
+        <Text className="block">邀请好友加入</Text>
+      </Button>
+
+      {/* 返回首页 */}
+      <Button variant="outline" className="w-full" onClick={goToHome}>
+        <Text className="block">进入房间</Text>
+      </Button>
+    </View>
+  )
+
+  // 渲染加入/创建房间表单
+  const renderJoinForm = () => (
+    <>
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'join' | 'create')}>
         <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="join">加入房间</TabsTrigger>
-          <TabsTrigger value="create">开房</TabsTrigger>
+          <TabsTrigger value="create">创建房间</TabsTrigger>
         </TabsList>
 
+        {/* 加入房间 */}
         <TabsContent value="join">
           <Card className="bg-white">
             <CardHeader>
-              <CardTitle className="text-base">加入房间</CardTitle>
+              <CardTitle className="text-base">输入房间号加入</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <View>
-                <Label>房号</Label>
-                <View className="bg-gray-50 rounded-xl px-4 py-3 mt-1">
+                <Label className="mb-2 block">房间号</Label>
+                <View className="bg-gray-50 rounded-xl px-4 py-3">
                   <Input
-                    className="w-full bg-transparent"
-                    placeholder="请输入房号"
+                    placeholder="请输入房间号"
                     value={inviteCode}
-                    onInput={(e) => setInviteCode(e.detail.value.toUpperCase())}
-                    maxlength={6}
-                  />
-                </View>
-              </View>
-
-              {/* 快速加入按钮（从分享链接进入时显示） */}
-              {showAutoJoin && inviteCode && (
-                <Button
-                  className="w-full bg-green-500 hover:bg-green-600"
-                  onClick={quickJoin}
-                  disabled={autoJoinLoading}
-                >
-                  {autoJoinLoading ? '正在加入...' : '一键使用微信昵称加入'}
-                </Button>
-              )}
-
-              <View className="flex items-center">
-                <View className="flex-1 h-px bg-gray-200" />
-                <Text className="block text-xs text-gray-400 px-4">或</Text>
-                <View className="flex-1 h-px bg-gray-200" />
-              </View>
-
-              <View>
-                <Label>您的昵称</Label>
-                <View className="bg-gray-50 rounded-xl px-4 py-3 mt-1">
-                  <Input
+                    onInput={(e: any) => setInviteCode(e.detail.value?.toUpperCase() || '')}
                     className="w-full bg-transparent"
-                    placeholder="请输入昵称"
-                    value={memberName}
-                    onInput={(e) => setMemberName(e.detail.value)}
-                    maxlength={20}
                   />
                 </View>
               </View>
+              
+              <View>
+                <Label className="mb-2 block">您的昵称</Label>
+                <View className="bg-gray-50 rounded-xl px-4 py-3">
+                  <Input
+                    placeholder="请输入昵称（可选）"
+                    value={memberName}
+                    onInput={(e: any) => setMemberName(e.detail.value || '')}
+                    className="w-full bg-transparent"
+                  />
+                </View>
+                <Text className="block text-xs text-gray-400 mt-1">
+                  不填则使用微信昵称
+                </Text>
+              </View>
 
-              <Button
-                className="w-full"
-                onClick={() => handleJoinGroup()}
-                disabled={loading}
+              <Button 
+                className="w-full" 
+                onClick={handleJoinGroup}
+                disabled={loading || !inviteCode.trim()}
               >
-                {loading ? '加入中...' : '加入'}
+                {loading ? (
+                  <>
+                    <RefreshCw size={16} color="#fff" className="mr-2" />
+                    <Text className="block">加入中...</Text>
+                  </>
+                ) : (
+                  <Text className="block">加入房间</Text>
+                )}
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* 创建房间 */}
         <TabsContent value="create">
           <Card className="bg-white">
             <CardHeader>
-              <CardTitle className="text-base">开房</CardTitle>
+              <CardTitle className="text-base">创建新房间</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <View>
-                <Label>房间名称</Label>
-                <View className="bg-gray-50 rounded-xl px-4 py-3 mt-1">
+                <Label className="mb-2 block">房间名称</Label>
+                <View className="bg-gray-50 rounded-xl px-4 py-3">
                   <Input
-                    className="w-full bg-transparent"
-                    placeholder="请输入房间名称"
+                    placeholder="给房间起个名字"
                     value={groupName}
-                    onInput={(e) => setGroupName(e.detail.value)}
-                    maxlength={50}
-                  />
-                </View>
-              </View>
-
-              <View>
-                <Label>您的昵称</Label>
-                <View className="bg-gray-50 rounded-xl px-4 py-3 mt-1">
-                  <Input
+                    onInput={(e: any) => setGroupName(e.detail.value || '')}
                     className="w-full bg-transparent"
-                    placeholder="请输入昵称"
-                    value={memberName}
-                    onInput={(e) => setMemberName(e.detail.value)}
-                    maxlength={20}
                   />
                 </View>
               </View>
+              
+              <View>
+                <Label className="mb-2 block">您的昵称</Label>
+                <View className="bg-gray-50 rounded-xl px-4 py-3">
+                  <Input
+                    placeholder="请输入昵称（可选）"
+                    value={memberName}
+                    onInput={(e: any) => setMemberName(e.detail.value || '')}
+                    className="w-full bg-transparent"
+                  />
+                </View>
+                <Text className="block text-xs text-gray-400 mt-1">
+                  不填则使用微信昵称
+                </Text>
+              </View>
 
-              <Button
-                className="w-full"
-                onClick={createGroup}
-                disabled={loading}
+              <Button 
+                className="w-full" 
+                onClick={handleCreateGroup}
+                disabled={loading || !groupName.trim()}
               >
-                {loading ? '创建中...' : '创建'}
+                {loading ? (
+                  <>
+                    <RefreshCw size={16} color="#fff" className="mr-2" />
+                    <Text className="block">创建中...</Text>
+                  </>
+                ) : (
+                  <Text className="block">创建房间</Text>
+                )}
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+    </>
+  )
 
-      {/* 二维码弹框 */}
-      {showQRCode && (
-        <View
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={handleCloseQRCode}
-        >
-          <View
-            className="bg-white rounded-xl w-full max-w-sm p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <View className="text-center mb-6">
-              <Text className="block text-lg font-semibold text-gray-900 mb-2">
-                房间创建成功
-              </Text>
-              <Text className="block text-sm text-gray-500 mb-4">
-                分享给好友邀请加入
-              </Text>
+  return (
+    <View className="min-h-screen bg-gray-50 px-4 py-6">
+      <Text className="block text-xl font-semibold text-gray-900 mb-6">
+        {createdGroup ? '房间创建成功' : '加入或创建房间'}
+      </Text>
 
-              {qrCodeUrl ? (
-                <View className="flex justify-center mb-4 bg-white p-4 rounded-lg border border-gray-200">
-                  <Image
-                    src={qrCodeUrl}
-                    className="w-48 h-48"
-                    mode="aspectFit"
-                  />
-                </View>
-              ) : (
-                <View className="flex justify-center mb-4 bg-gray-100 rounded-lg p-12">
-                  <Text className="block text-gray-400">二维码生成中...</Text>
-                </View>
-              )}
-
-              <View className="bg-gray-50 rounded-lg p-3 mb-2">
-                <Text className="block text-xs text-gray-500 mb-1">房号</Text>
-                <Text className="block text-lg font-bold text-gray-900">
-                  {currentGroup?.invite_code}
-                </Text>
-              </View>
-            </View>
-
-            <View className="space-y-3">
-              <ShareButton className="w-full">
-                分享给好友
-              </ShareButton>
-              <Button
-                className="w-full"
-                onClick={handleCloseQRCode}
-              >
-                完成
-              </Button>
-            </View>
-          </View>
-        </View>
-      )}
+      {createdGroup ? renderSharePanel() : renderJoinForm()}
     </View>
   )
 }
