@@ -1,13 +1,18 @@
-import { View, Text } from '@tarojs/components'
-import Taro, { useDidShow, showToast, navigateTo, showModal, setClipboardData } from '@tarojs/taro'
+import { View, Text, Input } from '@tarojs/components'
+import Taro, { useDidShow, showToast, navigateTo, switchTab, showModal, setClipboardData } from '@tarojs/taro'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useGroupStore } from '@/stores/group'
 import { History, ChartBarBig } from 'lucide-react-taro'
+import { Network } from '@/network'
+import { useState } from 'react'
 
 const ProfilePage = () => {
-  const { currentGroup, currentMember, clear } = useGroupStore()
+  const { currentGroup, currentMember, setCurrentMember, clear } = useGroupStore()
+  const [editNicknameOpen, setEditNicknameOpen] = useState(false)
+  const [nicknameInput, setNicknameInput] = useState('')
 
   const leaveGroup = () => {
     showModal({
@@ -32,6 +37,46 @@ const ProfilePage = () => {
         showToast({ title: '房号已复制', icon: 'success' })
       }
     })
+  }
+
+  const openEditNickname = () => {
+    if (!currentMember) return
+    setNicknameInput(currentMember.name || '')
+    setEditNicknameOpen(true)
+  }
+
+  const handleSaveNickname = async () => {
+    if (!currentMember || !nicknameInput.trim()) {
+      showToast({ title: '请输入昵称', icon: 'none' })
+      return
+    }
+
+    try {
+      const res = await Network.request({
+        url: '/api/members/update',
+        method: 'POST',
+        data: {
+          member_id: currentMember.id,
+          name: nicknameInput.trim()
+        }
+      })
+
+      const result = res.data as any
+      if (result && result.code === 200) {
+        // 更新本地状态
+        const updatedMember = { ...currentMember, name: nicknameInput.trim() }
+        setCurrentMember(updatedMember)
+        Taro.setStorageSync('currentMember', updatedMember)
+        
+        showToast({ title: '昵称修改成功', icon: 'success' })
+        setEditNicknameOpen(false)
+      } else {
+        showToast({ title: result?.msg || '修改失败', icon: 'none' })
+      }
+    } catch (err) {
+      console.error('修改昵称失败:', err)
+      showToast({ title: '修改失败', icon: 'none' })
+    }
   }
 
   useDidShow(() => {
@@ -83,6 +128,22 @@ const ProfilePage = () => {
               <CardTitle className="text-base">我的信息</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <View>
+                <Label>我的昵称</Label>
+                <View className="flex items-center gap-2 mt-1">
+                  <Text className="block text-sm text-gray-700 flex-1">
+                    {currentMember?.name || '未设置'}
+                  </Text>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={openEditNickname}
+                  >
+                    修改
+                  </Button>
+                </View>
+              </View>
+
               <View>
                 <Label>我的积分</Label>
                 <Text className="block text-2xl font-bold text-blue-500 mt-1">
@@ -146,6 +207,41 @@ const ProfilePage = () => {
           </Button>
         </View>
       )}
+
+      {/* 修改昵称弹窗 */}
+      <Dialog open={editNicknameOpen} onClose={() => setEditNicknameOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>修改昵称</DialogTitle>
+          </DialogHeader>
+          <View className="py-4">
+            <View className="bg-gray-50 rounded-xl px-4 py-3 mb-4">
+              <Input
+                className="w-full bg-transparent"
+                placeholder="请输入昵称"
+                value={nicknameInput}
+                onInput={(e: any) => setNicknameInput(e.detail.value)}
+                maxlength={20}
+              />
+            </View>
+            <View className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setEditNicknameOpen(false)}
+              >
+                取消
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSaveNickname}
+              >
+                保存
+              </Button>
+            </View>
+          </View>
+        </DialogContent>
+      </Dialog>
     </View>
   )
 }
