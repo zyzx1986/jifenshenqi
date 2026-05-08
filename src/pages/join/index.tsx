@@ -10,9 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useGroupStore } from '@/stores/group'
 import { Network } from '@/network'
 
-// 微信小程序全局对象
-declare const wx: any
-
 const JoinPage = () => {
   const { setCurrentGroup, setCurrentMember } = useGroupStore()
   const [activeTab, setActiveTab] = useState<'join' | 'create'>('join')
@@ -38,44 +35,19 @@ const JoinPage = () => {
         return
       }
 
-      // 如果没有 wx.getUserProfile，使用 wx.getUserInfo（旧API）
-      if (typeof wx !== 'undefined') {
-        // 优先使用 getUserProfile（新API）
-        if (wx.getUserProfile) {
-          wx.getUserProfile({
-            desc: '用于快速加入房间或开房',
-            success: (userRes) => {
-              const nickname = userRes.userInfo?.nickName || ''
-              if (nickname) {
-                Taro.setStorageSync('wechatNickname', nickname)
-                resolve(nickname)
-              } else {
-                resolve('')
-              }
-            },
-            fail: () => {
-              resolve('')
+      // 小程序环境使用 Taro.getUserProfile
+      if (Taro.getEnv() === 'WEAPP' && Taro.canIUse('getUserProfile')) {
+        Taro.getUserProfile({
+          desc: '用于设置房间昵称',
+          success: (res) => {
+            const nickname = res.userInfo?.nickName || ''
+            if (nickname) {
+              Taro.setStorageSync('wechatNickname', nickname)
             }
-          })
-        } else if (wx.getUserInfo) {
-          // 旧版 API 作为降级
-          wx.getUserInfo({
-            success: (userRes) => {
-              const nickname = userRes.userInfo?.nickName || ''
-              if (nickname) {
-                Taro.setStorageSync('wechatNickname', nickname)
-                resolve(nickname)
-              } else {
-                resolve('')
-              }
-            },
-            fail: () => {
-              resolve('')
-            }
-          })
-        } else {
-          resolve('')
-        }
+            resolve(nickname)
+          },
+          fail: () => resolve('')
+        })
       } else {
         resolve('')
       }
@@ -290,7 +262,7 @@ const JoinPage = () => {
         method: 'POST',
         data: {
           invite_code: targetCode,
-          member_name: memberName
+          member_name: nickname || memberName
         },
         header: token ? { Authorization: `Bearer ${token}` } : {}
       })
@@ -338,8 +310,16 @@ const JoinPage = () => {
 
     // 先获取微信昵称
     const nickname = await new Promise<string>((resolve) => {
-      if (typeof wx !== 'undefined' && wx.getUserProfile) {
-        wx.getUserProfile({
+      // 优先使用缓存的昵称
+      const cachedNickname = Taro.getStorageSync('wechatNickname')
+      if (cachedNickname) {
+        resolve(cachedNickname)
+        return
+      }
+      
+      // 小程序环境使用 Taro.getUserProfile
+      if (Taro.getEnv() === 'WEAPP' && Taro.canIUse('getUserProfile')) {
+        Taro.getUserProfile({
           desc: '用于快速加入房间',
           success: (res) => {
             const nick = res.userInfo?.nickName || ''
@@ -348,9 +328,7 @@ const JoinPage = () => {
             }
             resolve(nick)
           },
-          fail: () => {
-            resolve('')
-          }
+          fail: () => resolve('')
         })
       } else {
         resolve('')
