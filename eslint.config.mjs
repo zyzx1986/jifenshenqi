@@ -245,6 +245,13 @@ export default [
       ],
     },
   },
+  // 为 index.tsx 和 join/index.tsx 禁用 Button 导入限制（用于 openType 分享功能）
+  {
+    files: ['src/pages/index/index.tsx', 'src/pages/join/index.tsx'],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
   {
     ignores: ['dist/**', 'dist-*/**', 'node_modules/**'],
   },

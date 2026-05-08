@@ -1,4 +1,4 @@
-import { View, Text } from '@tarojs/components'
+import { View, Text, Button as NativeButton } from '@tarojs/components'
 import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
@@ -251,14 +251,12 @@ const JoinPage = () => {
         </CardContent>
       </Card>
 
-      {/* 分享按钮 */}
       {/* 分享按钮 - 使用原生 Button 实现 open-type="share" */}
-      <Button
-        className="w-full mb-3"
-        open-type="share"
-      >
-        <Text className="block">邀请好友加入</Text>
-      </Button>
+      <View className="w-full mb-3">
+        <NativeButton openType="share" className="w-full bg-primary text-primary-foreground">
+          <Text className="block">邀请好友加入</Text>
+        </NativeButton>
+      </View>
 
       {/* 返回首页 */}
       <Button variant="outline" className="w-full" onClick={goToHome}>

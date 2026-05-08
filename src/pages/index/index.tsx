@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro'
-import { View, Text, ScrollView } from '@tarojs/components'
+import { View, Text, ScrollView, Button as NativeButton } from '@tarojs/components'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Network } from '@/network'
 import { Users, Gift, Crown, RefreshCw, Plus, LogIn } from 'lucide-react-taro'
@@ -290,16 +290,12 @@ export default function Index() {
             </Text>
           </View>
         </View>
-        
-        {/* 分享按钮 */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full mt-4"
-          open-type="share"
-        >
-          <Text className="block">邀请好友加入</Text>
-        </Button>
+        {/* 分享按钮 - 使用原生 Button 实现 open-type="share" */}
+        <View className="w-full mt-4">
+          <NativeButton openType="share" className="w-full text-sm bg-white border border-gray-300 rounded">
+            <Text className="block">邀请好友加入</Text>
+          </NativeButton>
+        </View>
       </View>
 
       {/* 成员列表 */}
