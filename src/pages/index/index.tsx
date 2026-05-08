@@ -649,7 +649,7 @@ export default function Index() {
                     {/* 用户信息 */}
                     <Avatar 
                       className="mr-3"
-                      onClick={member.id === currentMember?.id ? handleOpenEditNickname : undefined}
+                     
                     >
                       <AvatarFallback className={`${
                         member.id === currentMember?.id ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'
