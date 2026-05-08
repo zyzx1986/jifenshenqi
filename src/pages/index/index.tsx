@@ -292,14 +292,11 @@ export default function Index() {
         </View>
         
         {/* 分享按钮 */}
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           className="w-full mt-4"
-          onClick={() => {
-            Taro.showShareMenu({ withShareTicket: true })
-            Taro.showToast({ title: '请点击右上角分享', icon: 'none' })
-          }}
+          open-type="share"
         >
           <Text className="block">邀请好友加入</Text>
         </Button>

@@ -252,12 +252,10 @@ const JoinPage = () => {
       </Card>
 
       {/* 分享按钮 */}
-      <Button 
+      {/* 分享按钮 - 使用原生 Button 实现 open-type="share" */}
+      <Button
         className="w-full mb-3"
-        onClick={() => {
-          Taro.showShareMenu({ withShareTicket: true })
-          Taro.showToast({ title: '请点击右上角分享', icon: 'none' })
-        }}
+        open-type="share"
       >
         <Text className="block">邀请好友加入</Text>
       </Button>
