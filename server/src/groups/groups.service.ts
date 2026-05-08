@@ -179,10 +179,8 @@ export class GroupsService {
     const fromGiven = (fromMember as any).total_given || 0
     const toPoints = (toMember as any).total_points || 0
 
-    // 检查发送者积分是否足够
-    if (fromPoints < points) {
-      throw new Error(`积分不足，你的积分为 ${fromPoints}`)
-    }
+    // 零和博弈规则：不需要检查发送者积分是否足够，直接扣减即可
+    // 积分可以为负数
 
     // 创建积分记录
     const { error: recordError } = await this.client

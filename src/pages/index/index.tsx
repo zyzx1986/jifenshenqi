@@ -251,11 +251,7 @@ export default function Index() {
       return
     }
     
-    // 检查自己的积分是否足够
-    if (currentMember.total_points < points) {
-      Taro.showToast({ title: `积分不足，你的积分为 ${currentMember.total_points}`, icon: 'none' })
-      return
-    }
+    // 零和博弈规则：不需要检查积分是否足够，可以直接给分（积分可能为负数）
     
     setGiving(true)
     try {
