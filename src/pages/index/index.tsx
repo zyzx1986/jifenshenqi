@@ -227,7 +227,23 @@ export default function Index() {
 
   // 确认给分
   const handleConfirmGive = async () => {
-    if (!selectedMember || !givePoints || !currentGroup) return
+    // 添加详细日志
+    console.log('=== 给分开始 ===')
+    console.log('currentGroup:', currentGroup)
+    console.log('currentMember:', currentMember)
+    console.log('selectedMember:', selectedMember)
+    console.log('givePoints:', givePoints)
+    console.log('members:', members)
+    
+    if (!selectedMember || !givePoints || !currentGroup) {
+      Taro.showToast({ title: '参数不完整', icon: 'none' })
+      return
+    }
+    
+    if (!currentMember) {
+      Taro.showToast({ title: '用户未登录', icon: 'none' })
+      return
+    }
     
     const points = parseInt(givePoints, 10)
     if (Number.isNaN(points) || points <= 0) {
@@ -235,17 +251,25 @@ export default function Index() {
       return
     }
     
+    // 检查自己的积分是否足够
+    if (currentMember.total_points < points) {
+      Taro.showToast({ title: `积分不足，你的积分为 ${currentMember.total_points}`, icon: 'none' })
+      return
+    }
+    
     setGiving(true)
     try {
       const token = Taro.getStorageSync('token')
+      console.log('发送给分请求...')
       const res = await Network.request({
         url: '/api/members/points/give',
         method: 'POST',
         data: {
           group_id: currentGroup.id,
-          from_member_id: currentMember?.id,
+          from_member_id: currentMember.id,
           to_member_id: selectedMember.id,
-          points: points
+          points: points,
+          reason: '积分赠送'
         },
         header: token ? { Authorization: `Bearer ${token}` } : {}
       })
