@@ -223,7 +223,24 @@ export default function Index() {
 
   // 页面显示时检查URL参数或自动创建房间
   useDidShow(() => {
-    // 先从本地存储获取房间信息
+    // 先从 URL 参数检查是否有邀请码
+    const pages = Taro.getCurrentPages()
+    const currentPage = pages[pages.length - 1]
+    
+    if (currentPage) {
+      const options = (currentPage as any).options || (currentPage as any).$taroOptions || {}
+      if (options.invite_code && options.invite_code !== 'undefined') {
+        // 有邀请码，优先处理加入房间
+        // 清除旧的房间数据，确保加入新房间
+        clear()
+        setTimeout(() => {
+          autoJoinRoom(options.invite_code)
+        }, 100)
+        return
+      }
+    }
+    
+    // 没有邀请码，检查本地存储的房间信息
     const savedGroup = Taro.getStorageSync('currentGroup')
     
     // 如果有保存的房间信息，加载成员列表
@@ -236,22 +253,8 @@ export default function Index() {
       return
     }
     
-    // 没有房间，检查URL参数
-    const pages = Taro.getCurrentPages()
-    const currentPage = pages[pages.length - 1]
-    if (currentPage) {
-      const options = (currentPage as any).options || (currentPage as any).$taroOptions || {}
-      if (options.invite_code && options.invite_code !== 'undefined') {
-        // 有邀请码，加入房间
-        autoJoinRoom(options.invite_code)
-      } else {
-        // 没有邀请码，自动创建房间
-        autoCreateRoom()
-      }
-    } else {
-      // 无法获取参数，自动创建房间
-      autoCreateRoom()
-    }
+    // 没有房间也没有邀请码，自动创建房间
+    autoCreateRoom()
   })
 
   // 检查是否需要恢复对局
