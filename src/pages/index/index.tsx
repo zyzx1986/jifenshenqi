@@ -141,6 +141,18 @@ export default function Index() {
     Taro.navigateTo({ url: '/pages/join/index' })
   }
 
+  // 复制邀请码
+  const copyInviteCode = () => {
+    if (currentGroup?.invite_code) {
+      Taro.setClipboardData({
+        data: currentGroup.invite_code,
+        success: () => {
+          Taro.showToast({ title: '邀请码已复制', icon: 'success' })
+        }
+      })
+    }
+  }
+
   // 连接 WebSocket
   const connectWebSocket = () => {
     if (!currentGroup || !currentMember) return
@@ -292,9 +304,15 @@ export default function Index() {
         </View>
         {/* 分享按钮 - 使用原生 Button 实现 open-type="share" */}
         <View className="w-full mt-4">
-          <NativeButton openType="share" className="w-full text-sm bg-white border border-gray-300 rounded">
-            <Text className="block">邀请好友加入</Text>
-          </NativeButton>
+          {Taro.getEnv() === Taro.ENV_TYPE.WEAPP ? (
+            <NativeButton openType="share" className="w-full text-sm bg-white border border-gray-300 rounded">
+              <Text className="block">邀请好友加入</Text>
+            </NativeButton>
+          ) : (
+            <Button className="w-full text-sm bg-white border border-gray-300 rounded" onClick={copyInviteCode}>
+              <Text className="block">复制邀请码: {currentGroup?.invite_code}</Text>
+            </Button>
+          )}
         </View>
       </View>
 

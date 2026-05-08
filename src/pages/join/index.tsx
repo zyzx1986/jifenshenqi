@@ -253,9 +253,15 @@ const JoinPage = () => {
 
       {/* 分享按钮 - 使用原生 Button 实现 open-type="share" */}
       <View className="w-full mb-3">
-        <NativeButton openType="share" className="w-full bg-primary text-primary-foreground">
-          <Text className="block">邀请好友加入</Text>
-        </NativeButton>
+        {Taro.getEnv() === Taro.ENV_TYPE.WEAPP ? (
+          <NativeButton openType="share" className="w-full bg-primary text-primary-foreground">
+            <Text className="block">邀请好友加入</Text>
+          </NativeButton>
+        ) : (
+          <Button className="w-full" onClick={copyInviteCode}>
+            <Text className="block">复制邀请码: {inviteCode}</Text>
+          </Button>
+        )}
       </View>
 
       {/* 返回首页 */}
