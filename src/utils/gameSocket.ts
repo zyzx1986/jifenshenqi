@@ -25,6 +25,7 @@ class GameSocket {
   private config: GameSocketConfig | null = null
   private reconnectTimer: NodeJS.Timeout | null = null
   private isManualDisconnect = false
+  private eventsBound = false
 
   // 获取 WebSocket URL
   private getWsUrl(): string {
@@ -38,6 +39,22 @@ class GameSocket {
     
     // 小程序环境使用 wss
     return `wss://${domain}/game`
+  }
+
+  // 绑定所有事件监听器
+  private bindEvents() {
+    if (!this.socket || this.eventsBound) return
+    
+    const events = ['roomState', 'memberJoined', 'memberLeft', 'pointsUpdated', 'roundCompleted', 'gameEnded']
+    events.forEach(event => {
+      this.socket?.on(event, (data: any) => {
+        console.log(`[GameSocket] 收到事件: ${event}`, data)
+        const handlers = this.messageHandlers.get(event) || []
+        handlers.forEach(handler => handler(data))
+      })
+    })
+    
+    this.eventsBound = true
   }
 
   // 连接
@@ -66,6 +83,8 @@ class GameSocket {
 
       this.socket.on('connect', () => {
         console.log('[GameSocket] 连接成功')
+        this.eventsBound = false
+        this.bindEvents()
         this.joinRoom()
       })
 
@@ -79,16 +98,11 @@ class GameSocket {
       this.socket.on('connect_error', (error) => {
         console.error('[GameSocket] 连接错误:', error)
       })
-
-      // 监听所有服务器事件
-      const events = ['roomState', 'memberJoined', 'memberLeft', 'pointsUpdated', 'roundCompleted', 'gameEnded']
-      events.forEach(event => {
-        this.socket?.on(event, (data: any) => {
-          console.log(`[GameSocket] 收到事件: ${event}`, data)
-          const handlers = this.messageHandlers.get(event) || []
-          handlers.forEach(handler => handler(data))
-        })
-      })
+      
+      // 连接时立即绑定事件
+      if (this.socket.connected) {
+        this.bindEvents()
+      }
 
     } catch (err) {
       console.error('[GameSocket] 创建连接失败:', err)
@@ -128,6 +142,15 @@ class GameSocket {
       this.messageHandlers.set(event, [])
     }
     this.messageHandlers.get(event)!.push(handler)
+    
+    // 如果 socket 已连接，立即绑定事件
+    if (this.socket?.connected) {
+      this.socket.on(event, (data: any) => {
+        console.log(`[GameSocket] 收到事件: ${event}`, data)
+        const handlers = this.messageHandlers.get(event) || []
+        handlers.forEach(h => h(data))
+      })
+    }
   }
 
   // 移除消息处理器
@@ -153,10 +176,16 @@ class GameSocket {
     }
 
     if (this.socket) {
-      this.send('leaveRoom', { roomId: this.config?.roomId })
+      try {
+        this.socket.emit('leaveRoom', { roomId: this.config?.roomId })
+      } catch (e) {
+        // 忽略错误
+      }
       this.socket.disconnect()
       this.socket = null
     }
+    
+    this.eventsBound = false
   }
 
   // 是否已连接
