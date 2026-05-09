@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { useGroupStore } from '@/stores/group'
 import { History, ChartBarBig } from 'lucide-react-taro'
 import { Network } from '@/network'
+import { gameSocket } from '@/utils/gameSocket'
 import { useState } from 'react'
 
 const ProfilePage = () => {
@@ -21,7 +22,23 @@ const ProfilePage = () => {
       content: '确定要退出当前房间吗？',
       success: (res) => {
         if (res.confirm) {
-          clear() // 清理所有状态和本地存储
+          // 先发送离开消息通知房间内其他人
+          if (currentGroup && currentMember) {
+            console.log('[Profile] 发送离开房间消息:', {
+              roomId: currentGroup.id,
+              memberId: currentMember.id,
+              memberName: currentMember.name,
+            })
+            gameSocket.send('leaveRoom', {
+              roomId: currentGroup.id,
+              memberId: currentMember.id,
+              memberName: currentMember.name,
+            })
+          }
+          // 断开 WebSocket
+          gameSocket.disconnect()
+          // 清理所有状态和本地存储
+          clear()
           Taro.reLaunch({ url: '/pages/join/index' })
           showToast({ title: '已退出房间', icon: 'success' })
         }
