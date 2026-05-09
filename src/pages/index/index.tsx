@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro'
+import Taro, { useDidShow, useDidHide, useShareAppMessage } from '@tarojs/taro'
 import { View, Text, ScrollView, Button as NativeButton } from '@tarojs/components'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -26,6 +26,7 @@ export default function Index() {
   const [showGivePanel, setShowGivePanel] = useState(false)
   const [giving, setGiving] = useState(false)
   const [connected, setConnected] = useState(false)
+  const [wsInitialized, setWsInitialized] = useState(false)
   const [showRecovery, setShowRecovery] = useState(false)
   const [recovering, setRecovering] = useState(false)
 
@@ -77,9 +78,22 @@ export default function Index() {
       }
       loadMembers()
       checkRecovery()
-      connectWebSocket()
-      setupWebSocketHandlers()
+      
+      // 只在未初始化时连接 WebSocket
+      if (!wsInitialized) {
+        console.log('[Index] 初始化 WebSocket...')
+        connectWebSocket()
+        setupWebSocketHandlers()
+        setWsInitialized(true)
+      }
     }
+  })
+
+  // 页面隐藏时断开 WebSocket
+  useDidHide(() => {
+    console.log('[Index] 页面隐藏，断开 WebSocket')
+    gameSocket.disconnect()
+    setWsInitialized(false)
   })
 
   // 设置 WebSocket 消息处理器
