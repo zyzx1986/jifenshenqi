@@ -71,8 +71,20 @@ export class GroupsService {
     return { group, member }
   }
 
-  async joinGroup(inviteCode: string, memberName: string): Promise<{ group: Group; member: Member }> {
-    const userId = `user_${Date.now()}`
+  async joinGroup(inviteCode: string, memberName: string, token?: string): Promise<{ group: Group; member: Member }> {
+    // 如果有 token，从 token 中获取 userId；否则生成临时 userId
+    let userId: string;
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, this.jwtSecret) as any
+        userId = decoded.userId || `user_${Date.now()}`
+      } catch (error) {
+        // token 无效时生成临时 userId
+        userId = `user_${Date.now()}`
+      }
+    } else {
+      userId = `user_${Date.now()}`
+    }
 
     // 查找群组
     const { data: groupData, error: groupError } = await this.client
@@ -721,6 +733,27 @@ export class GroupsService {
         rankings: [],
         fun_facts: []
       }
+    }
+  }
+
+  // 删除成员
+  async removeMember(groupId: string, memberId: string): Promise<boolean> {
+    try {
+      const { error } = await this.client
+        .from('members')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('id', memberId)
+
+      if (error) {
+        console.error('删除成员失败:', error)
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('删除成员失败:', error)
+      return false
     }
   }
 }

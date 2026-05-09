@@ -33,10 +33,12 @@ export class GroupsController {
 
   @Post('join')
   async joinGroup(
-    @Body() body: { invite_code: string; member_name: string }
+    @Body() body: { invite_code: string; member_name: string },
+    @Headers('authorization') authHeader?: string
   ) {
     const { invite_code, member_name } = body
-    const result = await this.groupsService.joinGroup(invite_code, member_name)
+    const token = authHeader?.replace('Bearer ', '') || ''
+    const result = await this.groupsService.joinGroup(invite_code, member_name, token)
     return {
       code: 200,
       message: 'success',

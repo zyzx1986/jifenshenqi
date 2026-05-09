@@ -114,10 +114,28 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('leaveRoom')
   async handleLeaveRoom(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { roomId: string },
+    @MessageBody() data: { roomId: string; memberId: string; memberName: string; userId: string },
   ) {
-    const { roomId } = data;
+    const { roomId, memberId, memberName, userId } = data;
     
+    this.logger.log(`Member ${memberName} leaving room ${roomId}`);
+    
+    // 从数据库删除成员
+    try {
+      const { error } = await this.supabase
+        .from('members')
+        .delete()
+        .eq('group_id', roomId)
+        .eq('id', memberId);
+      
+      if (error) {
+        this.logger.error(`Failed to delete member from database: ${error.message}`);
+      }
+    } catch (err) {
+      this.logger.error(`Error deleting member: ${err}`);
+    }
+    
+    // 从 socket 房间移除
     client.leave(roomId);
     
     const clients = this.roomClients.get(roomId);
@@ -125,10 +143,13 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const member = clients.get(client.id);
       clients.delete(client.id);
       
+      // 通知房间内其他成员有人离开（包含最新成员列表）
       if (member) {
+        const members = await this.getRoomMembers(roomId);
         this.server.to(roomId).emit('memberLeft', {
           memberId: member.memberId,
           memberName: member.memberName,
+          members, // 发送最新成员列表
         });
       }
       

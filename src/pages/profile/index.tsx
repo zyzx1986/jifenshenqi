@@ -28,11 +28,13 @@ const ProfilePage = () => {
               roomId: currentGroup.id,
               memberId: currentMember.id,
               memberName: currentMember.name,
+              userId: (currentMember as any).user_id || (currentMember as any).userId,
             })
             gameSocket.send('leaveRoom', {
               roomId: currentGroup.id,
               memberId: currentMember.id,
               memberName: currentMember.name,
+              userId: (currentMember as any).user_id || (currentMember as any).userId,
             })
           }
           // 断开 WebSocket
