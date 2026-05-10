@@ -138,12 +138,18 @@ const JoinPage = () => {
       }
 
       const token = Taro.getStorageSync('token')
+      let userId = Taro.getStorageSync('userId')
+      if (!userId) {
+        userId = `user_${Date.now()}`
+        Taro.setStorageSync('userId', userId)
+      }
       const res = await Network.request({
         url: '/api/groups/join',
         method: 'POST',
         data: {
           invite_code: inviteCode.trim().toUpperCase(),
-          member_name: nickname
+          member_name: nickname,
+          user_id: userId
         },
         header: token ? { Authorization: `Bearer ${token}` } : {}
       })

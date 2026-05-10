@@ -71,19 +71,24 @@ export class GroupsService {
     return { group, member }
   }
 
-  async joinGroup(inviteCode: string, memberName: string, token?: string): Promise<{ group: Group; member: Member }> {
+  async joinGroup(
+    inviteCode: string,
+    memberName: string,
+    token?: string,
+    fallbackUserId?: string
+  ): Promise<{ group: Group; member: Member; isNewMember: boolean }> {
     // 如果有 token，从 token 中获取 userId；否则生成临时 userId
     let userId: string;
     if (token) {
       try {
         const decoded = jwt.verify(token, this.jwtSecret) as any
-        userId = decoded.userId || `user_${Date.now()}`
+        userId = decoded.userId || fallbackUserId || `user_${Date.now()}`
       } catch (error) {
         // token 无效时生成临时 userId
-        userId = `user_${Date.now()}`
+        userId = fallbackUserId || `user_${Date.now()}`
       }
     } else {
-      userId = `user_${Date.now()}`
+      userId = fallbackUserId || `user_${Date.now()}`
     }
 
     // 查找群组
@@ -110,7 +115,7 @@ export class GroupsService {
       .maybeSingle()
 
     if (existingMember) {
-      return { group, member: existingMember as Member }
+      return { group, member: existingMember as Member, isNewMember: false }
     }
 
     // 创建成员
@@ -131,7 +136,7 @@ export class GroupsService {
     }
     const member = memberData as Member
 
-    return { group, member }
+    return { group, member, isNewMember: true }
   }
 
   async getGroupMembers(groupId: string): Promise<Member[]> {
@@ -145,6 +150,21 @@ export class GroupsService {
       throw new Error(`查询成员失败: ${error.message}`)
     }
     return (data || []) as Member[]
+  }
+
+  async getGroupInviteCode(groupId: string): Promise<string | null> {
+    const { data, error } = await this.client
+      .from('groups')
+      .select('invite_code')
+      .eq('id', groupId)
+      .maybeSingle()
+
+    if (error) {
+      console.error('查询房间邀请码失败:', error)
+      return null
+    }
+
+    return data?.invite_code || null
   }
 
   async updateMemberName(memberId: string, name: string): Promise<Member> {

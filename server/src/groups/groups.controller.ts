@@ -1,10 +1,13 @@
 import { Controller, Get, Post, Body, Query, Headers } from '@nestjs/common'
 import { GroupsService } from './groups.service'
-import { Member, PointsRecord } from './types'
+import { GameGateway } from '@/websocket/game.gateway'
 
 @Controller('groups')
 export class GroupsController {
-  constructor(private readonly groupsService: GroupsService) {}
+  constructor(
+    private readonly groupsService: GroupsService,
+    private readonly gameGateway: GameGateway
+  ) {}
 
   @Post('create')
   async createGroup(
@@ -33,16 +36,48 @@ export class GroupsController {
 
   @Post('join')
   async joinGroup(
-    @Body() body: { invite_code: string; member_name: string },
+    @Body() body: { invite_code: string; member_name: string; user_id?: string },
     @Headers('authorization') authHeader?: string
   ) {
     const { invite_code, member_name } = body
     const token = authHeader?.replace('Bearer ', '') || ''
-    const result = await this.groupsService.joinGroup(invite_code, member_name, token)
+    const result = await this.groupsService.joinGroup(invite_code, member_name, token, body.user_id)
+
+    if (result.isNewMember) {
+      const members = await this.groupsService.getGroupMembers(result.group.id)
+      await this.gameGateway.broadcastToRoom(invite_code, 'memberJoined', {
+        memberId: result.member.id,
+        memberName: result.member.name,
+        members
+      })
+    }
+
     return {
       code: 200,
       message: 'success',
       data: result
+    }
+  }
+
+  @Post('leave')
+  async leaveGroup(
+    @Body() body: { group_id: string; member_id: string; invite_code: string; member_name?: string }
+  ) {
+    const success = await this.groupsService.removeMember(body.group_id, body.member_id)
+
+    if (success) {
+      const members = await this.groupsService.getGroupMembers(body.group_id)
+      await this.gameGateway.broadcastToRoom(body.invite_code, 'memberLeft', {
+        memberId: body.member_id,
+        memberName: body.member_name,
+        members
+      })
+    }
+
+    return {
+      code: 200,
+      message: success ? 'success' : 'failed',
+      data: success
     }
   }
 
@@ -239,7 +274,10 @@ export class MembersController {
 
 @Controller('points')
 export class PointsController {
-  constructor(private readonly groupsService: GroupsService) {}
+  constructor(
+    private readonly groupsService: GroupsService,
+    private readonly gameGateway: GameGateway
+  ) {}
 
   @Post('give')
   async givePoints(
@@ -258,6 +296,19 @@ export class PointsController {
       body.points,
       body.reason
     )
+
+    const inviteCode = await this.groupsService.getGroupInviteCode(body.group_id)
+
+    if (inviteCode) {
+      await this.gameGateway.broadcastToRoom(inviteCode, 'pointsUpdated', {
+        fromMemberId: body.from_member_id,
+        toMemberId: body.to_member_id,
+        points: body.points,
+        members,
+        timestamp: new Date().toISOString()
+      })
+    }
+
     return {
       code: 200,
       message: 'success',

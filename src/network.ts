@@ -13,7 +13,7 @@ export namespace Network {
         if (url.startsWith('http://') || url.startsWith('https://')) {
             return url
         }
-        return `${PROJECT_DOMAIN}${url}`
+        return `${PROJECT_HTTP_BASE}${url}`
     }
 
     export const request: typeof Taro.request = option => {

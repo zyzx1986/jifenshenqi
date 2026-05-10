@@ -1,6 +1,7 @@
 /// <reference types="@tarojs/taro" />
 
-declare const PROJECT_DOMAIN: string | undefined;
+declare const PROJECT_HTTP_BASE: string | undefined;
+declare const PROJECT_WS_BASE: string | undefined;
 declare const TARO_ENV: "weapp" | "h5" | undefined;
 
 declare module '*.png';
