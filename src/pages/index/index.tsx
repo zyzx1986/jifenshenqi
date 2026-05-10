@@ -44,6 +44,18 @@ function applyRoundToParticipants(
   })
 }
 
+function normalizeGameSession(session: any): GameSession {
+  return {
+    ...session,
+    participants: Array.isArray(session?.participants)
+      ? session.participants
+      : JSON.parse(session?.participants || '[]'),
+    rounds: Array.isArray(session?.rounds)
+      ? session.rounds
+      : JSON.parse(session?.rounds || '[]'),
+  }
+}
+
 export default function Index() {
   const {
     currentGame,
@@ -212,6 +224,21 @@ export default function Index() {
       }
     }
 
+    const handleGameSessionUpdated = (data: any) => {
+      if (!data?.session) {
+        return
+      }
+
+      const nextSession = normalizeGameSession(data.session)
+      setCurrentGame(nextSession)
+      setShowRecovery(false)
+      setRecoverySession(null)
+
+      if (data.started) {
+        Taro.showToast({ title: '房主已经开始对局', icon: 'none' })
+      }
+    }
+
     const handleGameEnded = () => {
       loadMembers()
       clearGame()
@@ -224,6 +251,7 @@ export default function Index() {
     gameSocket.on('memberJoined', handleMemberJoined)
     gameSocket.on('memberLeft', handleMemberLeft)
     gameSocket.on('pointsUpdated', handlePointsUpdated)
+    gameSocket.on('gameSessionUpdated', handleGameSessionUpdated)
     gameSocket.on('gameEnded', handleGameEnded)
 
     return () => {
@@ -231,9 +259,10 @@ export default function Index() {
       gameSocket.off('memberJoined', handleMemberJoined)
       gameSocket.off('memberLeft', handleMemberLeft)
       gameSocket.off('pointsUpdated', handlePointsUpdated)
+      gameSocket.off('gameSessionUpdated', handleGameSessionUpdated)
       gameSocket.off('gameEnded', handleGameEnded)
     }
-  }, [currentGroup, currentMember, clearGame])
+  }, [currentGroup, currentMember, clearGame, setCurrentGame])
 
   useDidShow(() => {
     if (!currentGroup) {

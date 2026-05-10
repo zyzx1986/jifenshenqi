@@ -51,7 +51,7 @@ class GameSocket {
   private bindEvents() {
     if (!this.socket || this.eventsBound) return
 
-    const events = ['roomState', 'memberJoined', 'memberLeft', 'pointsUpdated', 'roundCompleted', 'gameEnded']
+    const events = ['roomState', 'memberJoined', 'memberLeft', 'pointsUpdated', 'roundCompleted', 'gameEnded', 'gameSessionUpdated']
     events.forEach((event) => {
       this.socket?.on(event, (data: any) => {
         console.log(`[GameSocket] 收到事件: ${event}`, data)

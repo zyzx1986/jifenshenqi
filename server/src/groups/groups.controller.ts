@@ -171,6 +171,15 @@ export class GroupsController {
   ) {
     const token = authHeader?.replace('Bearer ', '') || ''
     const session = await this.groupsService.saveGameSession(token, body)
+
+    if (session) {
+      const latestSession = await this.groupsService.getCurrentGameSession(token, body.invite_code)
+      await this.gameGateway.broadcastToRoom(body.invite_code, 'gameSessionUpdated', {
+        session: latestSession || session,
+        started: body.rounds.length === 0
+      })
+    }
+
     return {
       code: 200,
       message: 'success',
