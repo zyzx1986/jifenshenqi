@@ -1018,4 +1018,120 @@ export class GroupsService {
       return null
     }
   }
+
+  async handleMemberLeave(groupId: string, memberId: string) {
+    try {
+      const { data: member, error: memberError } = await this.client
+        .from('members')
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('id', memberId)
+        .single()
+
+      if (memberError || !member) {
+        console.error('查询退出成员失败:', memberError)
+        return { success: false }
+      }
+
+      const { data: group, error: groupError } = await this.client
+        .from('groups')
+        .select('*')
+        .eq('id', groupId)
+        .single()
+
+      if (groupError || !group) {
+        console.error('查询房间失败:', groupError)
+        return { success: false }
+      }
+
+      const { data: currentSession } = await this.client
+        .from('game_sessions')
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('status', 'playing')
+        .maybeSingle()
+
+      const { error: deleteError } = await this.client
+        .from('members')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('id', memberId)
+
+      if (deleteError) {
+        console.error('删除成员失败:', deleteError)
+        return { success: false }
+      }
+
+      const { data: remainingMembers } = await this.client
+        .from('members')
+        .select('*')
+        .eq('group_id', groupId)
+        .order('created_at', { ascending: true })
+
+      const members = (remainingMembers || []) as Member[]
+      let nextCreatorId: string | null = null
+
+      if (group.creator_id === member.user_id && members.length > 0) {
+        nextCreatorId = members[0].user_id
+        await this.client
+          .from('groups')
+          .update({
+            creator_id: nextCreatorId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', groupId)
+      }
+
+      let updatedSession: any = null
+      let abandoned = false
+
+      if (currentSession) {
+        const nextParticipants = JSON.parse((currentSession as any).participants || '[]')
+          .filter((participant: any) => participant.member_id !== memberId)
+
+        if (nextParticipants.length < 2) {
+          abandoned = true
+          await this.client
+            .from('game_sessions')
+            .update({
+              status: 'abandoned',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', (currentSession as any).id)
+        } else {
+          const nextHostId = nextCreatorId || (currentSession as any).host_id
+          const { data: sessionAfterUpdate } = await this.client
+            .from('game_sessions')
+            .update({
+              participants: JSON.stringify(nextParticipants),
+              host_id: nextHostId,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', (currentSession as any).id)
+            .select()
+            .single()
+
+          if (sessionAfterUpdate) {
+            updatedSession = {
+              ...sessionAfterUpdate,
+              participants: JSON.parse((sessionAfterUpdate as any).participants || '[]'),
+              rounds: JSON.parse((sessionAfterUpdate as any).rounds || '[]')
+            }
+          }
+        }
+      }
+
+      return {
+        success: true,
+        members,
+        leavingMember: member,
+        nextCreatorId,
+        abandoned,
+        updatedSession
+      }
+    } catch (error) {
+      console.error('处理成员退出失败:', error)
+      return { success: false }
+    }
+  }
 }

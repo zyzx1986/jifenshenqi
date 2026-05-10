@@ -12,6 +12,7 @@ import { gameSocket } from '@/utils/gameSocket'
 import './index.scss'
 
 type RecoverySession = GameSession | null
+const MAX_SESSION_ROUNDS = 200
 
 function createGameId(groupId: string) {
   return `${groupId}_${Date.now()}`
@@ -54,6 +55,14 @@ function normalizeGameSession(session: any): GameSession {
       ? session.rounds
       : JSON.parse(session?.rounds || '[]'),
   }
+}
+
+function trimSessionRounds<T>(rounds: T[]): T[] {
+  if (rounds.length <= MAX_SESSION_ROUNDS) {
+    return rounds
+  }
+
+  return rounds.slice(-MAX_SESSION_ROUNDS)
 }
 
 export default function Index() {
@@ -114,7 +123,7 @@ export default function Index() {
         room_name: session.room_name,
         invite_code: session.invite_code,
         participants: session.participants,
-        rounds: session.rounds,
+        rounds: trimSessionRounds(session.rounds),
       },
       header: getCurrentTokenHeader(),
     })
@@ -157,8 +166,15 @@ export default function Index() {
 
       const result = res.data as any
       if (result.code === 200 && result.data) {
-        setRecoverySession(result.data)
-        setShowRecovery(true)
+        const nextSession = normalizeGameSession(result.data)
+        if (isRoomHost) {
+          setRecoverySession(nextSession)
+          setShowRecovery(true)
+        } else {
+          setCurrentGame(nextSession)
+          setRecoverySession(null)
+          setShowRecovery(false)
+        }
       } else {
         setRecoverySession(null)
         setShowRecovery(false)
@@ -204,6 +220,14 @@ export default function Index() {
       if (Array.isArray(data?.members)) {
         syncMembersState(data.members)
       }
+
+      if (data?.currentGame) {
+        setCurrentGame(normalizeGameSession(data.currentGame))
+        setShowRecovery(false)
+        setRecoverySession(null)
+      } else if (currentGame) {
+        clearGame()
+      }
     }
 
     const handleMemberJoined = (data: any) => {
@@ -247,12 +271,41 @@ export default function Index() {
       Taro.showToast({ title: '对局已结束', icon: 'none' })
     }
 
+    const handleHostTransferred = (data: any) => {
+      if (currentGroup && data?.creatorId) {
+        const nextGroup = {
+          ...currentGroup,
+          creator_id: data.creatorId,
+        }
+        setCurrentGroup(nextGroup)
+      }
+
+      if (Array.isArray(data?.members)) {
+        syncMembersState(data.members)
+      }
+
+      Taro.showToast({ title: '房主已自动转移', icon: 'none' })
+    }
+
+    const handleGameAbandoned = (data: any) => {
+      if (Array.isArray(data?.members)) {
+        syncMembersState(data.members)
+      }
+
+      clearGame()
+      setShowRecovery(false)
+      setRecoverySession(null)
+      Taro.showToast({ title: '人数不足，对局已中止', icon: 'none' })
+    }
+
     gameSocket.on('roomState', handleRoomState)
     gameSocket.on('memberJoined', handleMemberJoined)
     gameSocket.on('memberLeft', handleMemberLeft)
     gameSocket.on('pointsUpdated', handlePointsUpdated)
     gameSocket.on('gameSessionUpdated', handleGameSessionUpdated)
     gameSocket.on('gameEnded', handleGameEnded)
+    gameSocket.on('hostTransferred', handleHostTransferred)
+    gameSocket.on('gameAbandoned', handleGameAbandoned)
 
     return () => {
       gameSocket.off('roomState', handleRoomState)
@@ -261,8 +314,10 @@ export default function Index() {
       gameSocket.off('pointsUpdated', handlePointsUpdated)
       gameSocket.off('gameSessionUpdated', handleGameSessionUpdated)
       gameSocket.off('gameEnded', handleGameEnded)
+      gameSocket.off('hostTransferred', handleHostTransferred)
+      gameSocket.off('gameAbandoned', handleGameAbandoned)
     }
-  }, [currentGroup, currentMember, clearGame, setCurrentGame])
+  }, [currentGroup, currentMember, clearGame, setCurrentGame, setCurrentGroup])
 
   useDidShow(() => {
     if (!currentGroup) {
@@ -459,8 +514,12 @@ export default function Index() {
         rounds: currentGame.rounds.slice(0, -1),
       }
 
-      await saveGameSession(nextSession)
       setCurrentGame(nextSession)
+      try {
+        await saveGameSession(nextSession)
+      } catch (saveError) {
+        console.error('保存对局快照失败，但撤销已成功:', saveError)
+      }
       Taro.showToast({ title: '已撤销上一手', icon: 'success' })
     } catch (error) {
       console.error('撤销上一手失败:', error)
@@ -556,8 +615,12 @@ export default function Index() {
         ],
       }
 
-      await saveGameSession(nextSession)
       setCurrentGame(nextSession)
+      try {
+        await saveGameSession(nextSession)
+      } catch (saveError) {
+        console.error('保存对局快照失败，但送分已成功:', saveError)
+      }
       setShowGivePanel(false)
       setSelectedMember(null)
       setGivePoints('')
@@ -742,12 +805,24 @@ export default function Index() {
         </View>
         <View className="mt-4 w-full">
           {Taro.getEnv() === Taro.ENV_TYPE.WEAPP ? (
-            <NativeButton openType="share" className="w-full rounded border border-gray-300 bg-white text-sm">
-              <Text className="block">邀请好友加入</Text>
+            <NativeButton openType="share" className="w-full rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4">
+              <View className="flex items-center justify-center">
+                <Users size={20} color="#1890ff" className="mr-2" />
+                <Text className="block text-base font-semibold text-blue-600">邀请好友加入</Text>
+              </View>
+              <Text className="mt-1 block text-center text-xs text-blue-500">
+                分享房间邀请码给朋友，一起开始对局
+              </Text>
             </NativeButton>
           ) : (
-            <Button className="w-full rounded border border-gray-300 bg-white text-sm" onClick={copyInviteCode}>
-              <Text className="block">复制邀请码: {currentGroup?.invite_code}</Text>
+            <Button className="w-full rounded-2xl border border-blue-200 bg-blue-50 py-4" onClick={copyInviteCode}>
+              <View className="flex items-center justify-center">
+                <Users size={20} color="#1890ff" className="mr-2" />
+                <Text className="block text-base font-semibold text-blue-600">复制邀请码</Text>
+              </View>
+              <Text className="mt-1 block text-center text-xs text-blue-500">
+                当前邀请码：{currentGroup?.invite_code}
+              </Text>
             </Button>
           )}
         </View>

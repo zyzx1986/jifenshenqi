@@ -75,8 +75,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
 
     const members = await this.getRoomMembers(roomId)
+    const currentGame = await this.getRoomCurrentSession(roomId)
     client.emit('roomState', {
       members,
+      currentGame,
       memberCount: roomMap.size,
     })
 
@@ -194,6 +196,30 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (error) {
       this.logger.error('Failed to get room members:', error)
       return []
+    }
+  }
+
+  private async getRoomCurrentSession(roomId: string) {
+    try {
+      const { data } = await this.supabase
+        .from('game_sessions')
+        .select('*')
+        .eq('invite_code', roomId)
+        .eq('status', 'playing')
+        .single()
+
+      if (!data) {
+        return null
+      }
+
+      return {
+        ...data,
+        participants: JSON.parse((data as any).participants || '[]'),
+        rounds: JSON.parse((data as any).rounds || '[]')
+      }
+    } catch (error) {
+      this.logger.error('Failed to get room current session:', error)
+      return null
     }
   }
 }

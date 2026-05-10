@@ -54,21 +54,39 @@ export class GroupsController {
   async leaveGroup(
     @Body() body: { group_id: string; member_id: string; invite_code: string; member_name?: string }
   ) {
-    const success = await this.groupsService.removeMember(body.group_id, body.member_id)
+    const result = await this.groupsService.handleMemberLeave(body.group_id, body.member_id)
 
-    if (success) {
-      const members = await this.groupsService.getGroupMembers(body.group_id)
+    if (result.success) {
       await this.gameGateway.broadcastToRoom(body.invite_code, 'memberLeft', {
         memberId: body.member_id,
         memberName: body.member_name,
-        members
+        members: result.members
       })
+
+      if (result.nextCreatorId) {
+        await this.gameGateway.broadcastToRoom(body.invite_code, 'hostTransferred', {
+          creatorId: result.nextCreatorId,
+          members: result.members
+        })
+      }
+
+      if (result.abandoned) {
+        await this.gameGateway.broadcastToRoom(body.invite_code, 'gameAbandoned', {
+          reason: 'members_insufficient',
+          members: result.members
+        })
+      } else if (result.updatedSession) {
+        await this.gameGateway.broadcastToRoom(body.invite_code, 'gameSessionUpdated', {
+          session: result.updatedSession,
+          started: false
+        })
+      }
     }
 
     return {
       code: 200,
-      message: success ? 'success' : 'failed',
-      data: success
+      message: result.success ? 'success' : 'failed',
+      data: result.success
     }
   }
 
