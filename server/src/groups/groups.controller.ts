@@ -35,7 +35,10 @@ export class GroupsController {
     const result = await this.groupsService.joinGroup(invite_code, member_name, token, body.user_id)
 
     if (result.isNewMember) {
-      const members = await this.groupsService.getGroupMembers(result.group.id)
+      const members = this.gameGateway.decorateRoomMembers(
+        invite_code,
+        await this.groupsService.getGroupMembers(result.group.id)
+      )
       await this.gameGateway.broadcastToRoom(invite_code, 'memberJoined', {
         memberId: result.member.id,
         memberName: result.member.name,
@@ -57,23 +60,24 @@ export class GroupsController {
     const result = await this.groupsService.handleMemberLeave(body.group_id, body.member_id)
 
     if (result.success) {
+      const members = this.gameGateway.decorateRoomMembers(body.invite_code, result.members || [])
       await this.gameGateway.broadcastToRoom(body.invite_code, 'memberLeft', {
         memberId: body.member_id,
         memberName: body.member_name,
-        members: result.members
+        members
       })
 
       if (result.nextCreatorId) {
         await this.gameGateway.broadcastToRoom(body.invite_code, 'hostTransferred', {
           creatorId: result.nextCreatorId,
-          members: result.members
+          members
         })
       }
 
       if (result.abandoned) {
         await this.gameGateway.broadcastToRoom(body.invite_code, 'gameAbandoned', {
           reason: 'members_insufficient',
-          members: result.members
+          members
         })
       } else if (result.updatedSession) {
         await this.gameGateway.broadcastToRoom(body.invite_code, 'gameSessionUpdated', {
@@ -93,10 +97,11 @@ export class GroupsController {
   @Get('members')
   async getGroupMembers(@Query('group_id') groupId: string) {
     const members = await this.groupsService.getGroupMembers(groupId)
+    const inviteCode = await this.groupsService.getGroupInviteCode(groupId)
     return {
       code: 200,
       message: 'success',
-      data: members
+      data: inviteCode ? this.gameGateway.decorateRoomMembers(inviteCode, members) : members
     }
   }
 
@@ -252,6 +257,7 @@ export class GroupsController {
     const history = await this.groupsService.finishGameSessionV2(token, body)
 
     if (history) {
+      await this.groupsService.resetGroupMemberPoints(body.group_id)
       const members = await this.groupsService.getGroupMembers(body.group_id)
       await this.gameGateway.broadcastToRoom(body.invite_code, 'gameEnded', {
         members,
@@ -341,11 +347,12 @@ export class PointsController {
     const inviteCode = await this.groupsService.getGroupInviteCode(body.group_id)
 
     if (inviteCode) {
+      const members = this.gameGateway.decorateRoomMembers(inviteCode, result.members)
       await this.gameGateway.broadcastToRoom(inviteCode, 'pointsUpdated', {
         fromMemberId: body.from_member_id,
         toMemberId: body.to_member_id,
         points: body.points,
-        members: result.members,
+        members,
         timestamp: new Date().toISOString()
       })
     }
@@ -368,9 +375,10 @@ export class PointsController {
     const inviteCode = await this.groupsService.getGroupInviteCode(body.group_id)
 
     if (inviteCode) {
+      const members = this.gameGateway.decorateRoomMembers(inviteCode, result.members)
       await this.gameGateway.broadcastToRoom(inviteCode, 'pointsUpdated', {
         recordId: body.record_id,
-        members: result.members,
+        members,
         reversed: true,
         timestamp: new Date().toISOString()
       })

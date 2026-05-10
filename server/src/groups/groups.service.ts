@@ -1015,6 +1015,29 @@ export class GroupsService {
       }
     })
   }
+
+  async resetGroupMemberPoints(groupId: string): Promise<boolean> {
+    try {
+      const { error } = await this.client
+        .from('members')
+        .update({
+          total_points: 0,
+          updated_at: new Date().toISOString()
+        })
+        .eq('group_id', groupId)
+
+      if (error) {
+        console.error('resetGroupMemberPoints failed:', error)
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('resetGroupMemberPoints exception:', error)
+      return false
+    }
+  }
+
   async finishGameSessionV2(token: string, data: {
     group_id: string
     invite_code: string

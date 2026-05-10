@@ -4,6 +4,7 @@ import { create } from 'zustand'
 interface Member {
   id: string
   name: string
+  avatar_url?: string
   total_points: number
   total_given: number
   total_received: number

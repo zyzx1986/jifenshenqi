@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { useGroupStore, PointsRecord } from '@/stores/group'
 import { Network } from '@/network'
 import { gameSocket } from '@/utils/gameSocket'
+import { getCachedWechatAvatarUrl } from '@/utils/wechatNickname'
 
 const HistoryPage = () => {
   const { currentGroup, currentMember } = useGroupStore()
@@ -73,6 +74,7 @@ const HistoryPage = () => {
         memberId: currentMember.id,
         memberName: currentMember.name,
         userId: Taro.getStorageSync('userId') || '',
+        avatarUrl: currentMember.avatar_url || getCachedWechatAvatarUrl(),
       })
     }
   })

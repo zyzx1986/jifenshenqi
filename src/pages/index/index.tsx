@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import Taro, { useDidHide, useDidShow, useShareAppMessage } from '@tarojs/taro'
 import { Button as NativeButton, ScrollView, Text, View } from '@tarojs/components'
 import { Crown, Gift, LogIn, Play, Plus, RefreshCcw, RefreshCw, Square, Users } from 'lucide-react-taro'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Network } from '@/network'
 import { type GameSession, type Member, type Participant, useGroupStore } from '@/stores/group'
 import { gameSocket } from '@/utils/gameSocket'
+import { getCachedWechatAvatarUrl } from '@/utils/wechatNickname'
 import './index.scss'
 
 type RecoverySession = GameSession | null
@@ -63,6 +64,13 @@ function trimSessionRounds<T>(rounds: T[]): T[] {
   }
 
   return rounds.slice(-MAX_SESSION_ROUNDS)
+}
+
+function resetMemberScores(nextMembers: Member[]): Member[] {
+  return nextMembers.map((member) => ({
+    ...member,
+    total_points: 0,
+  }))
 }
 
 export default function Index() {
@@ -220,6 +228,7 @@ export default function Index() {
           setShowRecovery(false)
         } else if (currentGame?.invite_code === currentGroup.invite_code) {
           console.log('[index] syncCurrentSessionState:clearCurrentGame')
+          syncMembersState(resetMemberScores(members))
           clearGame()
         }
       }
@@ -238,6 +247,7 @@ export default function Index() {
       memberId: currentMember.id,
       memberName: currentMember.name,
       userId: Taro.getStorageSync('userId') || '',
+      avatarUrl: currentMember.avatar_url || getCachedWechatAvatarUrl(),
     })
     setConnected(true)
   }
@@ -317,8 +327,9 @@ export default function Index() {
       }
     }
 
-    const handleGameEnded = () => {
-      loadMembers()
+    const handleGameEnded = (data: any) => {
+      const nextMembers: Member[] = Array.isArray(data?.members) ? data.members : members
+      syncMembersState(resetMemberScores(nextMembers))
       clearGame()
       setShowRecovery(false)
       setRecoverySession(null)
@@ -379,7 +390,7 @@ export default function Index() {
     }
 
     loadMembers()
-    syncCurrentSessionState({ skipWhenCurrentGameReady: true })
+    syncCurrentSessionState()
     connectWebSocket()
   })
 
@@ -532,6 +543,7 @@ export default function Index() {
         throw new Error(result.message || 'finish game failed')
       }
 
+      syncMembersState(resetMemberScores(members))
       clearGame()
       setShowRecovery(false)
       setRecoverySession(null)
@@ -917,6 +929,7 @@ export default function Index() {
                 <CardContent className="p-4">
                   <View className="flex items-center">
                     <Avatar className="mr-3 h-12 w-12">
+                      <AvatarImage src={member.avatar_url || ''} />
                       <AvatarFallback className="bg-blue-100 text-blue-600">
                         <Text className="block text-lg font-semibold">
                           {member.name?.charAt(0) || member.name?.slice(0, 2) || '?'}

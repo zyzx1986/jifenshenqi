@@ -16,6 +16,7 @@ interface RoomClient {
   memberId: string
   memberName: string
   userId: string
+  avatarUrl?: string
 }
 
 @Injectable()
@@ -55,9 +56,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('joinRoom')
   async handleJoinRoom(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { roomId: string; memberId: string; memberName: string; userId: string },
+    @MessageBody() data: { roomId: string; memberId: string; memberName: string; userId: string; avatarUrl?: string },
   ) {
-    const { roomId, memberId, memberName, userId } = data
+    const { roomId, memberId, memberName, userId, avatarUrl } = data
 
     this.logger.log(`Member ${memberName} joining room ${roomId}`)
     client.join(roomId)
@@ -72,6 +73,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       memberId,
       memberName,
       userId,
+      avatarUrl,
     })
 
     const members = await this.getRoomMembers(roomId)
@@ -177,6 +179,25 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(roomId).emit(event, data)
   }
 
+  decorateRoomMembers(roomId: string, members: any[]) {
+    const clients = this.roomClients.get(roomId)
+    if (!clients || !Array.isArray(members)) {
+      return members
+    }
+
+    const avatarMap = new Map<string, string>()
+    clients.forEach((client) => {
+      if (client.userId && client.avatarUrl) {
+        avatarMap.set(client.userId, client.avatarUrl)
+      }
+    })
+
+    return members.map((member: any) => ({
+      ...member,
+      avatar_url: member?.avatar_url || avatarMap.get(member.user_id) || '',
+    }))
+  }
+
   private async getRoomMembers(roomId: string) {
     try {
       const { data: group } = await this.supabase
@@ -194,7 +215,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         .select('id, name, total_points, user_id, is_host')
         .eq('group_id', group.id)
 
-      return members || []
+      return this.decorateRoomMembers(roomId, members || [])
     } catch (error) {
       this.logger.error('Failed to get room members:', error)
       return []

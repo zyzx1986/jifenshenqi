@@ -5,6 +5,7 @@ interface GameSocketConfig {
   memberId: string
   memberName: string
   userId: string
+  avatarUrl?: string
 }
 
 type MessageHandler = (data: any) => void
@@ -101,6 +102,7 @@ class GameSocket {
           memberId: config.memberId,
           memberName: config.memberName,
           userId: config.userId,
+          avatarUrl: config.avatarUrl || '',
         },
       })
 
@@ -142,6 +144,7 @@ class GameSocket {
         memberId: this.config.memberId,
         memberName: this.config.memberName,
         userId: this.config.userId,
+        avatarUrl: this.config.avatarUrl || '',
       },
       (response: any) => {
         console.log('[GameSocket] joinRoom response:', response)
