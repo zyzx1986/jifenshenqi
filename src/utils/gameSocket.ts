@@ -15,6 +15,7 @@ function getDomain(): string {
     // @ts-ignore
     return PROJECT_WS_BASE
   }
+
   return 'ws://localhost:3000'
 }
 
@@ -48,15 +49,32 @@ class GameSocket {
     return `wss://${wsBase}/game`
   }
 
-  private bindEvents() {
-    if (!this.socket || this.eventsBound) return
+  private emitToHandlers(event: string, data: any) {
+    console.log(`[GameSocket] received event: ${event}`, data)
+    const handlers = this.messageHandlers.get(event) || []
+    handlers.forEach((handler) => handler(data))
+  }
 
-    const events = ['roomState', 'memberJoined', 'memberLeft', 'pointsUpdated', 'roundCompleted', 'gameEnded', 'gameSessionUpdated', 'hostTransferred', 'gameAbandoned']
+  private bindEvents() {
+    if (!this.socket || this.eventsBound) {
+      return
+    }
+
+    const events = [
+      'roomState',
+      'memberJoined',
+      'memberLeft',
+      'pointsUpdated',
+      'roundCompleted',
+      'gameEnded',
+      'gameSessionUpdated',
+      'hostTransferred',
+      'gameAbandoned',
+    ]
+
     events.forEach((event) => {
       this.socket?.on(event, (data: any) => {
-        console.log(`[GameSocket] 收到事件: ${event}`, data)
-        const handlers = this.messageHandlers.get(event) || []
-        handlers.forEach((handler) => handler(data))
+        this.emitToHandlers(event, data)
       })
     })
 
@@ -70,7 +88,7 @@ class GameSocket {
 
     try {
       const url = this.getWsUrl()
-      console.log('[GameSocket] 正在连接:', url)
+      console.log('[GameSocket] connecting:', url)
 
       this.socket = io(url, {
         transports: ['websocket'],
@@ -87,33 +105,35 @@ class GameSocket {
       })
 
       this.socket.on('connect', () => {
-        console.log('[GameSocket] 连接成功')
+        console.log('[GameSocket] connected')
         this.eventsBound = false
         this.bindEvents()
         this.joinRoom()
       })
 
       this.socket.on('disconnect', (reason) => {
-        console.log('[GameSocket] 连接断开:', reason)
+        console.log('[GameSocket] disconnected:', reason)
         if (!this.isManualDisconnect) {
-          console.log('[GameSocket] 将尝试重新连接...')
+          console.log('[GameSocket] will try reconnect automatically')
         }
       })
 
       this.socket.on('connect_error', (error) => {
-        console.error('[GameSocket] 连接错误:', error)
+        console.error('[GameSocket] connect error:', error)
       })
 
       if (this.socket.connected) {
         this.bindEvents()
       }
     } catch (err) {
-      console.error('[GameSocket] 创建连接失败:', err)
+      console.error('[GameSocket] create connection failed:', err)
     }
   }
 
   private joinRoom() {
-    if (!this.socket || !this.config) return
+    if (!this.socket || !this.config) {
+      return
+    }
 
     this.socket.emit(
       'joinRoom',
@@ -124,20 +144,20 @@ class GameSocket {
         userId: this.config.userId,
       },
       (response: any) => {
-        console.log('[GameSocket] joinRoom 响应:', response)
+        console.log('[GameSocket] joinRoom response:', response)
       }
     )
   }
 
   send(event: string, data: any) {
     if (!this.socket?.connected) {
-      console.warn('[GameSocket] 未连接，无法发送消息')
+      console.warn('[GameSocket] socket is not connected')
       return
     }
 
-    console.log(`[GameSocket] 发送事件: ${event}`, data)
+    console.log(`[GameSocket] emit event: ${event}`, data)
     this.socket.emit(event, data, (response: any) => {
-      console.log(`[GameSocket] ${event} 响应:`, response)
+      console.log(`[GameSocket] ${event} response:`, response)
     })
   }
 
@@ -145,15 +165,8 @@ class GameSocket {
     if (!this.messageHandlers.has(event)) {
       this.messageHandlers.set(event, [])
     }
-    this.messageHandlers.get(event)!.push(handler)
 
-    if (this.socket?.connected) {
-      this.socket.on(event, (data: any) => {
-        console.log(`[GameSocket] 收到事件: ${event}`, data)
-        const handlers = this.messageHandlers.get(event) || []
-        handlers.forEach((registeredHandler) => registeredHandler(data))
-      })
-    }
+    this.messageHandlers.get(event)!.push(handler)
   }
 
   off(event: string, handler?: MessageHandler) {
@@ -163,9 +176,10 @@ class GameSocket {
       if (index > -1) {
         handlers.splice(index, 1)
       }
-    } else {
-      this.messageHandlers.delete(event)
+      return
     }
+
+    this.messageHandlers.delete(event)
   }
 
   disconnect() {

@@ -151,8 +151,12 @@ export default function Index() {
     }
   }
 
-  const checkRecovery = async () => {
-    if (!currentGroup || currentGame?.invite_code === currentGroup.invite_code) {
+  const syncCurrentSessionState = async (options?: { skipWhenCurrentGameReady?: boolean }) => {
+    if (!currentGroup) {
+      return
+    }
+
+    if (options?.skipWhenCurrentGameReady && currentGame?.invite_code === currentGroup.invite_code) {
       return
     }
 
@@ -168,16 +172,22 @@ export default function Index() {
       if (result.code === 200 && result.data) {
         const nextSession = normalizeGameSession(result.data)
         if (isRoomHost) {
-          setRecoverySession(nextSession)
-          setShowRecovery(true)
+          if (!currentGame || currentGame.invite_code !== currentGroup.invite_code) {
+            setRecoverySession(nextSession)
+            setShowRecovery(true)
+          }
         } else {
           setCurrentGame(nextSession)
           setRecoverySession(null)
           setShowRecovery(false)
         }
       } else {
-        setRecoverySession(null)
-        setShowRecovery(false)
+        if (isRoomHost) {
+          setRecoverySession(null)
+          setShowRecovery(false)
+        } else if (currentGame?.invite_code === currentGroup.invite_code) {
+          clearGame()
+        }
       }
     } catch (error) {
       console.error('检查恢复对局失败:', error)
@@ -325,9 +335,25 @@ export default function Index() {
     }
 
     loadMembers()
-    checkRecovery()
+    syncCurrentSessionState({ skipWhenCurrentGameReady: true })
     connectWebSocket()
   })
+
+  useEffect(() => {
+    if (!currentGroup || !currentMember || isRoomHost) {
+      return
+    }
+
+    if (currentGame?.invite_code === currentGroup.invite_code) {
+      return
+    }
+
+    const timer = setInterval(() => {
+      void syncCurrentSessionState()
+    }, 1500)
+
+    return () => clearInterval(timer)
+  }, [currentGame?.invite_code, currentGroup, currentMember, isRoomHost])
 
   useDidHide(() => {
     gameSocket.disconnect()
