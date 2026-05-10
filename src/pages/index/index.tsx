@@ -115,7 +115,7 @@ export default function Index() {
   }
 
   const saveGameSession = async (session: GameSession) => {
-    await Network.request({
+    const res = await Network.request({
       url: '/api/groups/game/save',
       method: 'POST',
       data: {
@@ -127,6 +127,18 @@ export default function Index() {
       },
       header: getCurrentTokenHeader(),
     })
+
+    const result = res.data as any
+    console.log('[index] saveGameSession:response', {
+      code: result?.code,
+      message: result?.message,
+      hasSession: Boolean(result?.data),
+      sessionId: result?.data?.id,
+    })
+
+    if (result?.code !== 200 || !result?.data) {
+      throw new Error(result?.message || 'save game session failed')
+    }
   }
 
   const loadMembers = async () => {

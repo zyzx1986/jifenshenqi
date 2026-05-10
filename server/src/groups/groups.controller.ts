@@ -145,8 +145,8 @@ export class GroupsController {
     const token = authHeader?.replace('Bearer ', '') || ''
     const session = await this.groupsService.getCurrentSession(token, inviteCode)
     return {
-      code: 200,
-      message: 'success',
+      code: session ? 200 : 500,
+      message: session ? 'success' : 'failed',
       data: session
     }
   }
