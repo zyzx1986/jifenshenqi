@@ -956,9 +956,20 @@ export class GroupsService {
     participants: any[]
     rounds: any[]
     total_rounds: number
+    user_id?: string
   }) {
     try {
-      const userId = this.verifyToken(token)
+      let userId = data.user_id || ''
+      if (token) {
+        try {
+          userId = this.verifyToken(token)
+        } catch (error) {
+          if (!userId) {
+            throw error
+          }
+        }
+      }
+
       if (!userId) {
         return null
       }

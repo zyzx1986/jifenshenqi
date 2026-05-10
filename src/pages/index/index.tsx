@@ -445,6 +445,7 @@ export default function Index() {
           rounds: currentGame.rounds,
           total_rounds: currentGame.rounds.length,
           room_name: currentGame.room_name,
+          user_id: currentMember?.user_id,
         },
         header: getCurrentTokenHeader(),
       })

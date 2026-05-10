@@ -228,6 +228,7 @@ export class GroupsController {
       rounds: any[]
       total_rounds: number
       room_name?: string
+      user_id?: string
     },
     @Headers('authorization') authHeader?: string
   ) {
