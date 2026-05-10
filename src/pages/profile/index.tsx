@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Network } from '@/network'
 import { useGroupStore } from '@/stores/group'
 import { gameSocket } from '@/utils/gameSocket'
+import { getCachedWechatNickname, resolveNickname } from '@/utils/wechatNickname'
 
 const ProfilePage = () => {
   const { currentGroup, currentMember, setCurrentMember, clear } = useGroupStore()
@@ -65,12 +66,17 @@ const ProfilePage = () => {
 
   const openEditNickname = () => {
     if (!currentMember) return
-    setNicknameInput(currentMember.name || '')
+    setNicknameInput(currentMember.name || getCachedWechatNickname() || '')
     setEditNicknameOpen(true)
   }
 
   const handleSaveNickname = async () => {
-    if (!currentMember || !nicknameInput.trim()) {
+    if (!currentMember) {
+      return
+    }
+
+    const finalNickname = await resolveNickname(nicknameInput)
+    if (!finalNickname) {
       showToast({ title: '请输入昵称', icon: 'none' })
       return
     }
@@ -81,15 +87,16 @@ const ProfilePage = () => {
         method: 'POST',
         data: {
           member_id: currentMember.id,
-          name: nicknameInput.trim(),
+          name: finalNickname,
         },
       })
 
       const result = res.data as any
       if (result && result.code === 200) {
-        const updatedMember = { ...currentMember, name: nicknameInput.trim() }
+        const updatedMember = { ...currentMember, name: finalNickname }
         setCurrentMember(updatedMember)
         Taro.setStorageSync('currentMember', updatedMember)
+        setNicknameInput(finalNickname)
 
         showToast({ title: '昵称修改成功', icon: 'success' })
         setEditNicknameOpen(false)

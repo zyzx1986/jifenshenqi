@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useGroupStore } from '@/stores/group'
 import { Network } from '@/network'
 import { Users, Copy, Check, RefreshCw } from 'lucide-react-taro'
+import { getCachedWechatNickname, resolveNickname } from '@/utils/wechatNickname'
 
 const JoinPage = () => {
   const { setCurrentGroup, setCurrentMember, setMembers } = useGroupStore()
@@ -20,36 +21,8 @@ const JoinPage = () => {
   const [createdGroup, setCreatedGroup] = useState<any>(null)
   const [copied, setCopied] = useState(false)
 
-  // 获取微信昵称作为默认昵称
-  const fetchWechatNickname = async (): Promise<string> => {
-    return new Promise<string>((resolve) => {
-      const cachedNickname = Taro.getStorageSync('wechatNickname')
-      if (cachedNickname) {
-        resolve(cachedNickname)
-        return
-      }
-
-      if (Taro.getEnv() === 'WEAPP' && Taro.canIUse('getUserProfile')) {
-        Taro.getUserProfile({
-          desc: '用于设置房间昵称',
-          success: (res) => {
-            const nickname = res.userInfo?.nickName || ''
-            if (nickname) {
-              Taro.setStorageSync('wechatNickname', nickname)
-            }
-            resolve(nickname)
-          },
-          fail: () => resolve('')
-        })
-      } else {
-        resolve('')
-      }
-    })
-  }
-
-  // 页面加载时获取昵称
   useEffect(() => {
-    const cachedNickname = Taro.getStorageSync('wechatNickname')
+    const cachedNickname = getCachedWechatNickname()
     if (cachedNickname) {
       setMemberName(cachedNickname)
     }
@@ -64,14 +37,14 @@ const JoinPage = () => {
 
     setLoading(true)
     try {
-      let nickname = memberName.trim()
+      const nickname = await resolveNickname(memberName)
       if (!nickname) {
-        nickname = await fetchWechatNickname()
-        if (!nickname) {
-          Taro.showToast({ title: '请输入您的昵称', icon: 'none' })
-          setLoading(false)
-          return
-        }
+        Taro.showToast({ title: '请输入您的昵称', icon: 'none' })
+        setLoading(false)
+        return
+      }
+
+      if (!memberName.trim()) {
         setMemberName(nickname)
       }
 
@@ -126,14 +99,14 @@ const JoinPage = () => {
 
     setLoading(true)
     try {
-      let nickname = memberName.trim()
+      const nickname = await resolveNickname(memberName)
       if (!nickname) {
-        nickname = await fetchWechatNickname()
-        if (!nickname) {
-          Taro.showToast({ title: '请输入您的昵称', icon: 'none' })
-          setLoading(false)
-          return
-        }
+        Taro.showToast({ title: '请输入您的昵称', icon: 'none' })
+        setLoading(false)
+        return
+      }
+
+      if (!memberName.trim()) {
         setMemberName(nickname)
       }
 
