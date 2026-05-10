@@ -30,17 +30,17 @@ interface PointsRecord {
   points: number
   reason: string
   created_at: string
+  is_revoked?: boolean
 }
 
-// 对局参与者
 interface Participant {
   member_id: string
   name: string
   score: number
 }
 
-// 对局记录
 interface Round {
+  record_id?: string
   from: string
   from_id: string
   to: string
@@ -50,7 +50,6 @@ interface Round {
   timestamp: number
 }
 
-// 当前对局状态
 interface GameSession {
   id: string
   group_id: string
@@ -66,7 +65,7 @@ interface GroupState {
   currentGroup: Group | null
   currentMember: Member | null
   members: Member[]
-  currentGame: GameSession | null  // 当前对局状态
+  currentGame: GameSession | null
   setCurrentGroup: (group: Group | null) => void
   setCurrentMember: (member: Member | null) => void
   setMembers: (members: Member[]) => void
@@ -79,16 +78,25 @@ interface GroupState {
   clear: () => void
 }
 
+function persistCurrentGame(game: GameSession | null) {
+  if (game) {
+    Taro.setStorageSync('currentGame', game)
+    return
+  }
+
+  Taro.removeStorageSync('currentGame')
+}
+
 export const useGroupStore = create<GroupState>((set) => {
-  // 从本地存储恢复数据
   const savedGroup = Taro.getStorageSync('currentGroup') || null
   const savedMember = Taro.getStorageSync('currentMember') || null
+  const savedGame = Taro.getStorageSync('currentGame') || null
 
   return {
     currentGroup: savedGroup,
     currentMember: savedMember,
     members: [],
-    currentGame: null,
+    currentGame: savedGame,
     setCurrentGroup: (group) => {
       set({ currentGroup: group })
       if (group) {
@@ -109,40 +117,60 @@ export const useGroupStore = create<GroupState>((set) => {
     addMember: (member) => set((state) => ({ members: [...state.members, member] })),
     updateMember: (memberId, points) =>
       set((state) => ({
-        members: state.members.map((m) =>
-          m.id === memberId ? { ...m, total_points: m.total_points + points } : m
+        members: state.members.map((member) =>
+          member.id === memberId
+            ? { ...member, total_points: member.total_points + points }
+            : member
         ),
       })),
-    setCurrentGame: (game) => set({ currentGame: game }),
+    setCurrentGame: (game) => {
+      persistCurrentGame(game)
+      set({ currentGame: game })
+    },
     updateGameParticipant: (memberId, score) =>
       set((state) => {
-        if (!state.currentGame) return state
-        const participants = state.currentGame.participants.map((p) =>
-          p.member_id === memberId ? { ...p, score: (p.score || 0) + score } : p
-        )
-        return { currentGame: { ...state.currentGame, participants } }
+        if (!state.currentGame) {
+          return state
+        }
+
+        const nextGame = {
+          ...state.currentGame,
+          participants: state.currentGame.participants.map((participant) =>
+            participant.member_id === memberId
+              ? { ...participant, score: (participant.score || 0) + score }
+              : participant
+          ),
+        }
+
+        persistCurrentGame(nextGame)
+        return { currentGame: nextGame }
       }),
     addGameRound: (round) =>
       set((state) => {
-        if (!state.currentGame) return state
-        return {
-          currentGame: {
-            ...state.currentGame,
-            rounds: [...state.currentGame.rounds, round]
-          }
+        if (!state.currentGame) {
+          return state
         }
+
+        const nextGame = {
+          ...state.currentGame,
+          rounds: [...state.currentGame.rounds, round],
+        }
+
+        persistCurrentGame(nextGame)
+        return { currentGame: nextGame }
       }),
-    clearGame: () => set({ currentGame: null }),
+    clearGame: () => {
+      persistCurrentGame(null)
+      set({ currentGame: null })
+    },
     clear: () => {
-      // 清理 localStorage
       Taro.removeStorageSync('currentGroup')
       Taro.removeStorageSync('currentMember')
       Taro.removeStorageSync('members')
       Taro.removeStorageSync('currentGame')
-      // 清理 Zustand store
       set({ currentGroup: null, currentMember: null, members: [], currentGame: null })
     },
   }
 })
 
-export type { Group, Member, PointsRecord, GameSession, Participant, Round };
+export type { GameSession, Group, Member, Participant, PointsRecord, Round }

@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
-import { Group, Member, PointsRecord } from './types'
 import * as jwt from 'jsonwebtoken'
 import * as QRCode from 'qrcode'
+import { Group, Member, PointsRecord } from './types'
 
 @Injectable()
 export class GroupsService {
   private client = getSupabaseClient()
   private jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+  private revokedReasonPrefix = '[REVOKED]'
 
   // 验证 token 并返回用户 ID
   private verifyToken(token: string): string {
@@ -188,7 +189,7 @@ export class GroupsService {
     toMemberId: string,
     points: number,
     reason: string
-  ): Promise<Member[]> {
+  ): Promise<{ members: Member[]; record: PointsRecord | null }> {
     // 获取发送者和接收者的当前积分
     const { data: membersData, error: fetchError } = await this.client
       .from('members')
@@ -215,7 +216,7 @@ export class GroupsService {
     // 积分可以为负数
 
     // 创建积分记录
-    const { error: recordError } = await this.client
+    const { data: recordData, error: recordError } = await this.client
       .from('points_records')
       .insert({
         group_id: groupId,
@@ -224,6 +225,8 @@ export class GroupsService {
         points,
         reason
       })
+      .select()
+      .single()
 
     if (recordError) {
       console.error('创建积分记录失败:', recordError)
@@ -264,7 +267,89 @@ export class GroupsService {
       .select('*')
       .eq('group_id', groupId)
 
-    return (members || []) as Member[]
+    return {
+      members: (members || []) as Member[],
+      record: (recordData || null) as PointsRecord | null
+    }
+  }
+
+  async revokePointsRecord(groupId: string, recordId: string): Promise<{ members: Member[]; recordId: string }> {
+    const { data: record, error: recordError } = await this.client
+      .from('points_records')
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('id', recordId)
+      .single()
+
+    if (recordError || !record) {
+      throw new Error(`未找到积分记录: ${recordError?.message || recordId}`)
+    }
+
+    if ((record.reason || '').startsWith(this.revokedReasonPrefix)) {
+      throw new Error('这条积分记录已经撤销过了')
+    }
+
+    const { data: membersData, error: fetchError } = await this.client
+      .from('members')
+      .select('id, total_points, total_given, total_received')
+      .in('id', [record.from_member_id, record.to_member_id])
+
+    if (fetchError) {
+      throw new Error(`查询成员失败: ${fetchError.message}`)
+    }
+
+    const fromMember = membersData?.find((member: any) => member.id === record.from_member_id)
+    const toMember = membersData?.find((member: any) => member.id === record.to_member_id)
+
+    if (!fromMember || !toMember) {
+      throw new Error('成员不存在')
+    }
+
+    const fromUpdate = await this.client
+      .from('members')
+      .update({
+        total_points: ((fromMember as any).total_points || 0) + (record.points || 0),
+        total_given: Math.max(0, ((fromMember as any).total_given || 0) - (record.points || 0))
+      })
+      .eq('id', record.from_member_id)
+
+    if (fromUpdate.error) {
+      throw new Error(`回滚赠送方积分失败: ${fromUpdate.error.message}`)
+    }
+
+    const toUpdate = await this.client
+      .from('members')
+      .update({
+        total_points: ((toMember as any).total_points || 0) - (record.points || 0),
+        total_received: Math.max(0, ((toMember as any).total_received || 0) - (record.points || 0))
+      })
+      .eq('id', record.to_member_id)
+
+    if (toUpdate.error) {
+      throw new Error(`回滚接收方积分失败: ${toUpdate.error.message}`)
+    }
+
+    const { error: updateRecordError } = await this.client
+      .from('points_records')
+      .update({
+        reason: `${this.revokedReasonPrefix}${record.reason || ''}`
+      })
+      .eq('id', recordId)
+
+    const deleteError = updateRecordError!
+    if (updateRecordError) {
+      throw new Error(`删除积分记录失败: ${deleteError.message}`)
+    }
+
+    const { data: members } = await this.client
+      .from('members')
+      .select('*')
+      .eq('group_id', groupId)
+
+    return {
+      members: (members || []) as Member[],
+      recordId
+    }
   }
 
   async getPointsHistory(groupId: string): Promise<PointsRecord[]> {
@@ -740,6 +825,7 @@ export class GroupsService {
           id: h.id,
           room_name: h.room_name,
           participants: JSON.parse(h.participants || '[]'),
+          rounds: JSON.parse(h.rounds || '[]'),
           total_rounds: h.total_rounds,
           created_at: h.created_at
         }))
@@ -775,5 +861,93 @@ export class GroupsService {
       console.error('删除成员失败:', error)
       return false
     }
+  }
+  async finishGameSession(token: string, data: {
+    group_id: string
+    invite_code: string
+    participants: any[]
+    rounds: any[]
+    total_rounds: number
+  }) {
+    try {
+      const userId = this.verifyToken(token)
+      if (!userId) return null
+
+      const { data: group } = await this.client
+        .from('groups')
+        .select('name')
+        .eq('id', data.group_id)
+        .single()
+
+      await this.client
+        .from('game_sessions')
+        .update({
+          status: 'finished',
+          updated_at: new Date().toISOString()
+        })
+        .eq('group_id', data.group_id)
+        .eq('status', 'playing')
+
+      const { data: history } = await this.client
+        .from('game_history')
+        .insert({
+          group_id: data.group_id,
+          room_name: group?.name || '鎴块棿',
+          invite_code: data.invite_code,
+          participants: JSON.stringify(data.participants),
+          rounds: JSON.stringify(data.rounds),
+          total_rounds: data.total_rounds,
+          start_time: new Date(Date.now() - data.total_rounds * 60000).toISOString(),
+          end_time: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      return history
+    } catch (error) {
+      console.error('缁撴潫瀵瑰眬澶辫触:', error)
+      return null
+    }
+  }
+  async getPointsHistoryView(groupId: string): Promise<any[]> {
+    const { data, error } = await this.client
+      .from('points_records')
+      .select('*')
+      .eq('group_id', groupId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('查询积分记录失败:', error)
+      throw new Error(`查询积分记录失败: ${error.message}`)
+    }
+
+    const memberIds = new Set<string>()
+    data?.forEach((record: any) => {
+      memberIds.add(record.from_member_id)
+      memberIds.add(record.to_member_id)
+    })
+
+    const { data: members } = await this.client
+      .from('members')
+      .select('id, name')
+      .in('id', Array.from(memberIds))
+
+    const memberMap = new Map<string, string>()
+    members?.forEach((member: any) => {
+      memberMap.set(member.id, member.name)
+    })
+
+    return (data || []).map((record: any) => {
+      const reason = record.reason || ''
+      const isRevoked = reason.startsWith(this.revokedReasonPrefix)
+
+      return {
+        ...record,
+        reason: isRevoked ? reason.replace(this.revokedReasonPrefix, '').trim() : reason,
+        is_revoked: isRevoked,
+        from_member_name: memberMap.get(record.from_member_id) || '未知',
+        to_member_name: memberMap.get(record.to_member_id) || '未知'
+      }
+    })
   }
 }

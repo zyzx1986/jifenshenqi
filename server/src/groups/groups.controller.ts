@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Query, Headers } from '@nestjs/common'
-import { GroupsService } from './groups.service'
 import { GameGateway } from '@/websocket/game.gateway'
+import { GroupsService } from './groups.service'
 
 @Controller('groups')
 export class GroupsController {
@@ -12,21 +12,12 @@ export class GroupsController {
   @Post('create')
   async createGroup(
     @Body() body: { name: string; member_name: string; user_id?: string },
-    @Headers('authorization') authHeader?: string
+    @Headers('authorization') _authHeader?: string
   ) {
     const { name, member_name } = body
-    // 如果有 token，使用 token 中的 userId；否则使用传入的 user_id 或生成新的
-    let userId = body.user_id
-    if (authHeader) {
-      try {
-        const { GroupsService } = await import('./groups.service')
-        // 从 token 解析（这里简化处理）
-      } catch (e) {}
-    }
-    if (!userId) {
-      userId = `user_${Date.now()}`
-    }
+    const userId = body.user_id || `user_${Date.now()}`
     const result = await this.groupsService.createGroup(name, member_name, userId)
+
     return {
       code: 200,
       message: 'success',
@@ -167,7 +158,6 @@ export class GroupsController {
     }
   }
 
-  // 创建或更新对局（保存当前对局状态）
   @Post('game/save')
   async saveGameSession(
     @Body() body: {
@@ -188,7 +178,6 @@ export class GroupsController {
     }
   }
 
-  // 获取当前对局状态（恢复对局）
   @Get('game/current')
   async getCurrentGameSession(
     @Query('invite_code') inviteCode: string,
@@ -203,7 +192,6 @@ export class GroupsController {
     }
   }
 
-  // 结束对局并保存到历史
   @Post('game/finish')
   async finishGame(
     @Body() body: {
@@ -212,11 +200,22 @@ export class GroupsController {
       participants: any[]
       rounds: any[]
       total_rounds: number
+      room_name?: string
     },
     @Headers('authorization') authHeader?: string
   ) {
     const token = authHeader?.replace('Bearer ', '') || ''
-    const history = await this.groupsService.finishGame(token, body)
+    const history = await this.groupsService.finishGameSession(token, body)
+
+    if (history) {
+      const members = await this.groupsService.getGroupMembers(body.group_id)
+      await this.gameGateway.broadcastToRoom(body.invite_code, 'gameEnded', {
+        members,
+        roomName: body.room_name || (history as any).room_name || '鎴块棿',
+        timestamp: new Date().toISOString()
+      })
+    }
+
     return {
       code: 200,
       message: 'success',
@@ -224,7 +223,6 @@ export class GroupsController {
     }
   }
 
-  // 获取对局历史记录（战绩）
   @Get('game/history')
   async getGameHistory(
     @Query('invite_code') inviteCode: string,
@@ -239,7 +237,6 @@ export class GroupsController {
     }
   }
 
-  // 获取战绩统计
   @Get('game/stats')
   async getGameStats(
     @Query('invite_code') inviteCode: string,
@@ -289,7 +286,7 @@ export class PointsController {
       reason: string
     }
   ) {
-    const members = await this.groupsService.givePoints(
+    const result = await this.groupsService.givePoints(
       body.group_id,
       body.from_member_id,
       body.to_member_id,
@@ -304,7 +301,7 @@ export class PointsController {
         fromMemberId: body.from_member_id,
         toMemberId: body.to_member_id,
         points: body.points,
-        members,
+        members: result.members,
         timestamp: new Date().toISOString()
       })
     }
@@ -312,13 +309,39 @@ export class PointsController {
     return {
       code: 200,
       message: 'success',
-      data: { members }
+      data: result
+    }
+  }
+
+  @Post('revoke')
+  async revokePoints(
+    @Body() body: {
+      group_id: string
+      record_id: string
+    }
+  ) {
+    const result = await this.groupsService.revokePointsRecord(body.group_id, body.record_id)
+    const inviteCode = await this.groupsService.getGroupInviteCode(body.group_id)
+
+    if (inviteCode) {
+      await this.gameGateway.broadcastToRoom(inviteCode, 'pointsUpdated', {
+        recordId: body.record_id,
+        members: result.members,
+        reversed: true,
+        timestamp: new Date().toISOString()
+      })
+    }
+
+    return {
+      code: 200,
+      message: 'success',
+      data: result
     }
   }
 
   @Get('history')
   async getHistory(@Query('group_id') groupId: string) {
-    const records = await this.groupsService.getPointsHistory(groupId)
+    const records = await this.groupsService.getPointsHistoryView(groupId)
     return {
       code: 200,
       message: 'success',

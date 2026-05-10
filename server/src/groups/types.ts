@@ -25,4 +25,5 @@ export interface PointsRecord {
   created_at: string
   from_member_name?: string
   to_member_name?: string
+  is_revoked?: boolean
 }

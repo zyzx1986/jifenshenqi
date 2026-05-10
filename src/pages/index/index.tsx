@@ -1,45 +1,90 @@
 import { useEffect, useState } from 'react'
 import Taro, { useDidHide, useDidShow, useShareAppMessage } from '@tarojs/taro'
 import { Button as NativeButton, ScrollView, Text, View } from '@tarojs/components'
-import { Crown, Gift, LogIn, Plus, RefreshCw, Users } from 'lucide-react-taro'
+import { Crown, Gift, LogIn, Play, Plus, RefreshCcw, RefreshCw, Square, Users } from 'lucide-react-taro'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Network } from '@/network'
-import { useGroupStore } from '@/stores/group'
+import { type GameSession, type Member, type Participant, useGroupStore } from '@/stores/group'
 import { gameSocket } from '@/utils/gameSocket'
 import './index.scss'
 
+type RecoverySession = GameSession | null
+
+function createGameId(groupId: string) {
+  return `${groupId}_${Date.now()}`
+}
+
+function buildInitialParticipants(members: Member[]): Participant[] {
+  return members.map((member) => ({
+    member_id: member.id,
+    name: member.name,
+    score: 0,
+  }))
+}
+
+function applyRoundToParticipants(
+  participants: Participant[],
+  fromMemberId: string,
+  toMemberId: string,
+  points: number
+): Participant[] {
+  return participants.map((participant) => {
+    if (participant.member_id === fromMemberId) {
+      return {
+        ...participant,
+        score: (participant.score || 0) - points,
+      }
+    }
+
+    if (participant.member_id === toMemberId) {
+      return {
+        ...participant,
+        score: (participant.score || 0) + points,
+      }
+    }
+
+    return participant
+  })
+}
+
 export default function Index() {
   const {
+    currentGame,
     currentGroup,
     currentMember,
     members,
+    setCurrentGame,
     setCurrentGroup,
     setCurrentMember,
     setMembers,
+    clearGame,
   } = useGroupStore()
 
   const [givePoints, setGivePoints] = useState('')
-  const [selectedMember, setSelectedMember] = useState<any>(null)
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null)
   const [showGivePanel, setShowGivePanel] = useState(false)
   const [giving, setGiving] = useState(false)
   const [connected, setConnected] = useState(false)
-  const [wsInitialized, setWsInitialized] = useState(false)
   const [showRecovery, setShowRecovery] = useState(false)
   const [recovering, setRecovering] = useState(false)
+  const [recoverySession, setRecoverySession] = useState<RecoverySession>(null)
+  const [savingGame, setSavingGame] = useState(false)
+  const [finishingGame, setFinishingGame] = useState(false)
+  const [undoing, setUndoing] = useState(false)
 
-  const hasRoom = !!currentGroup
+  const hasRoom = Boolean(currentGroup)
 
-  const syncMembersState = (nextMembers: any[]) => {
+  const syncMembersState = (nextMembers: Member[]) => {
     setMembers(nextMembers)
 
     if (!currentMember) {
       return
     }
 
-    const nextCurrentMember = nextMembers.find((member: any) => member.id === currentMember.id)
+    const nextCurrentMember = nextMembers.find((member) => member.id === currentMember.id)
     if (nextCurrentMember) {
       setCurrentMember({
         ...currentMember,
@@ -48,191 +93,175 @@ export default function Index() {
     }
   }
 
+  const getCurrentTokenHeader = () => {
+    const token = Taro.getStorageSync('token')
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
+
+  const saveGameSession = async (session: GameSession) => {
+    await Network.request({
+      url: '/api/groups/game/save',
+      method: 'POST',
+      data: {
+        group_id: session.group_id,
+        room_name: session.room_name,
+        invite_code: session.invite_code,
+        participants: session.participants,
+        rounds: session.rounds,
+      },
+      header: getCurrentTokenHeader(),
+    })
+  }
+
   const loadMembers = async () => {
-    if (!currentGroup) return
+    if (!currentGroup) {
+      return
+    }
 
     try {
-      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/groups/members',
         method: 'GET',
         data: { group_id: currentGroup.id },
-        header: token ? { Authorization: `Bearer ${token}` } : {},
+        header: getCurrentTokenHeader(),
       })
 
       const result = res.data as any
-      console.log('加载成员响应:', result)
-      if (result.code === 200 && result.data) {
+      if (result.code === 200 && Array.isArray(result.data)) {
         syncMembersState(result.data)
       }
-    } catch (err) {
-      console.error('加载成员失败:', err)
+    } catch (error) {
+      console.error('加载成员失败:', error)
     }
-  }
-
-  useEffect(() => {
-    const savedGroup = Taro.getStorageSync('currentGroup')
-    const savedMember = Taro.getStorageSync('currentMember') as any
-
-    if (savedGroup && !currentGroup) {
-      setCurrentGroup(savedGroup)
-    }
-    if (savedMember && !currentMember) {
-      setCurrentMember(savedMember)
-    }
-  }, [])
-
-  useDidShow(() => {
-    const savedGroup = Taro.getStorageSync('currentGroup')
-
-    if (!savedGroup) {
-      return
-    }
-
-    if (!currentGroup) {
-      setCurrentGroup(savedGroup)
-    }
-
-    loadMembers()
-    checkRecovery()
-
-    if (!wsInitialized) {
-      console.log('[Index] 初始化 WebSocket...')
-      connectWebSocket()
-      setupWebSocketHandlers()
-      setWsInitialized(true)
-    }
-  })
-
-  useDidHide(() => {
-    console.log('[Index] 页面隐藏，断开 WebSocket')
-    gameSocket.disconnect()
-    setWsInitialized(false)
-    setConnected(false)
-  })
-
-  const setupWebSocketHandlers = () => {
-    gameSocket.on('roomState', (data: any) => {
-      console.log('[Index] 收到房间状态:', data)
-      if (Array.isArray(data?.members)) {
-        syncMembersState(data.members)
-      } else {
-        loadMembers()
-      }
-    })
-
-    gameSocket.on('memberJoined', (data: any) => {
-      console.log('[Index] 收到成员加入通知:', data)
-      if (Array.isArray(data?.members)) {
-        syncMembersState(data.members)
-      } else {
-        loadMembers()
-      }
-      if (data.memberName) {
-        Taro.showToast({ title: `${data.memberName} 加入了房间`, icon: 'none' })
-      }
-    })
-
-    gameSocket.on('memberLeft', (data: any) => {
-      console.log('[Index] 收到成员离开通知:', data)
-      if (Array.isArray(data?.members)) {
-        syncMembersState(data.members)
-      } else {
-        loadMembers()
-      }
-      if (data.memberName) {
-        Taro.showToast({ title: `${data.memberName} 离开了房间`, icon: 'none' })
-      }
-    })
-
-    gameSocket.on('pointsUpdated', (data: any) => {
-      console.log('[Index] 收到积分更新通知:', data)
-      if (Array.isArray(data?.members)) {
-        syncMembersState(data.members)
-      } else {
-        loadMembers()
-      }
-    })
   }
 
   const checkRecovery = async () => {
-    if (!currentGroup) return
-
-    try {
-      const token = Taro.getStorageSync('token')
-      const res = await Network.request({
-        url: '/api/groups/session',
-        method: 'GET',
-        header: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-
-      const result = res.data as any
-      if (result.code === 200 && result.data && currentGroup.invite_code === result.data.inviteCode) {
-        setShowRecovery(true)
-      }
-    } catch (err) {
-      console.log('检查恢复对局失败:', err)
+    if (!currentGroup || currentGame?.invite_code === currentGroup.invite_code) {
+      return
     }
-  }
 
-  const handleRecoverSession = async () => {
-    if (!currentGroup) return
-
-    setRecovering(true)
     try {
-      const token = Taro.getStorageSync('token')
       const res = await Network.request({
-        url: `/api/groups/session?inviteCode=${currentGroup.invite_code}`,
+        url: '/api/groups/game/current',
         method: 'GET',
-        header: token ? { Authorization: `Bearer ${token}` } : {},
+        data: { invite_code: currentGroup.invite_code },
+        header: getCurrentTokenHeader(),
       })
 
       const result = res.data as any
       if (result.code === 200 && result.data) {
-        syncMembersState(result.data.members || [])
-        connectWebSocket()
+        setRecoverySession(result.data)
+        setShowRecovery(true)
       } else {
-        Taro.showToast({ title: '未找到进行中的对局', icon: 'none' })
+        setRecoverySession(null)
+        setShowRecovery(false)
       }
-    } catch (err) {
-      console.error('恢复对局失败:', err)
-      Taro.showToast({ title: '恢复失败', icon: 'none' })
-    } finally {
-      setRecovering(false)
-      setShowRecovery(false)
+    } catch (error) {
+      console.error('检查恢复对局失败:', error)
     }
   }
 
-  const handleNewGame = () => {
-    setShowRecovery(false)
-  }
-
-  const goToJoinPage = () => {
-    Taro.navigateTo({ url: '/pages/join/index' })
-  }
-
-  const copyInviteCode = () => {
-    if (!currentGroup?.invite_code) return
-
-    Taro.setClipboardData({
-      data: currentGroup.invite_code,
-      success: () => {
-        Taro.showToast({ title: '邀请码已复制', icon: 'success' })
-      },
-    })
-  }
-
   const connectWebSocket = () => {
-    if (!currentGroup || !currentMember) return
+    if (!currentGroup || !currentMember || gameSocket.isConnected()) {
+      return
+    }
 
-    setConnected(true)
     gameSocket.connect({
       roomId: currentGroup.invite_code,
       memberId: currentMember.id,
       memberName: currentMember.name,
       userId: Taro.getStorageSync('userId') || '',
     })
+    setConnected(true)
   }
+
+  useEffect(() => {
+    const savedGroup = Taro.getStorageSync('currentGroup')
+    const savedMember = Taro.getStorageSync('currentMember') as Member | null
+
+    if (savedGroup && !currentGroup) {
+      setCurrentGroup(savedGroup)
+    }
+
+    if (savedMember && !currentMember) {
+      setCurrentMember(savedMember)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!currentGroup || !currentMember) {
+      return
+    }
+
+    const handleRoomState = (data: any) => {
+      if (Array.isArray(data?.members)) {
+        syncMembersState(data.members)
+      }
+    }
+
+    const handleMemberJoined = (data: any) => {
+      if (Array.isArray(data?.members)) {
+        syncMembersState(data.members)
+      }
+
+      if (data?.memberName) {
+        Taro.showToast({ title: `${data.memberName} 加入了房间`, icon: 'none' })
+      }
+    }
+
+    const handleMemberLeft = (data: any) => {
+      if (Array.isArray(data?.members)) {
+        syncMembersState(data.members)
+      }
+
+      if (data?.memberName) {
+        Taro.showToast({ title: `${data.memberName} 离开了房间`, icon: 'none' })
+      }
+    }
+
+    const handlePointsUpdated = (data: any) => {
+      if (Array.isArray(data?.members)) {
+        syncMembersState(data.members)
+      }
+    }
+
+    const handleGameEnded = () => {
+      loadMembers()
+      clearGame()
+      setShowRecovery(false)
+      setRecoverySession(null)
+      Taro.showToast({ title: '本局已结束', icon: 'none' })
+    }
+
+    gameSocket.on('roomState', handleRoomState)
+    gameSocket.on('memberJoined', handleMemberJoined)
+    gameSocket.on('memberLeft', handleMemberLeft)
+    gameSocket.on('pointsUpdated', handlePointsUpdated)
+    gameSocket.on('gameEnded', handleGameEnded)
+
+    return () => {
+      gameSocket.off('roomState', handleRoomState)
+      gameSocket.off('memberJoined', handleMemberJoined)
+      gameSocket.off('memberLeft', handleMemberLeft)
+      gameSocket.off('pointsUpdated', handlePointsUpdated)
+      gameSocket.off('gameEnded', handleGameEnded)
+    }
+  }, [currentGroup, currentMember, clearGame])
+
+  useDidShow(() => {
+    if (!currentGroup) {
+      return
+    }
+
+    loadMembers()
+    checkRecovery()
+    connectWebSocket()
+  })
+
+  useDidHide(() => {
+    gameSocket.disconnect()
+    setConnected(false)
+  })
 
   useShareAppMessage(() => {
     if (!currentGroup) {
@@ -250,9 +279,131 @@ export default function Index() {
     }
   })
 
-  const handleGivePoints = async (member: any) => {
+  const startGame = async () => {
+    if (!currentGroup || !currentMember || members.length === 0) {
+      Taro.showToast({ title: '当前房间暂无可开局成员', icon: 'none' })
+      return
+    }
+
+    setSavingGame(true)
+    try {
+      const session: GameSession = {
+        id: createGameId(currentGroup.id),
+        group_id: currentGroup.id,
+        room_name: currentGroup.name,
+        invite_code: currentGroup.invite_code,
+        participants: buildInitialParticipants(members),
+        rounds: [],
+        host_id: currentMember.user_id,
+        status: 'playing',
+      }
+
+      await saveGameSession(session)
+      setCurrentGame(session)
+      setShowRecovery(false)
+      setRecoverySession(null)
+      Taro.showToast({ title: '对局已开始', icon: 'success' })
+    } catch (error) {
+      console.error('开始对局失败:', error)
+      Taro.showToast({ title: '开始对局失败', icon: 'none' })
+    } finally {
+      setSavingGame(false)
+    }
+  }
+
+  const handleRecoverSession = async () => {
+    if (!currentGroup) {
+      return
+    }
+
+    setRecovering(true)
+    try {
+      const res = await Network.request({
+        url: '/api/groups/game/current',
+        method: 'GET',
+        data: { invite_code: currentGroup.invite_code },
+        header: getCurrentTokenHeader(),
+      })
+
+      const result = res.data as any
+      if (result.code === 200 && result.data) {
+        setCurrentGame(result.data)
+        setRecoverySession(result.data)
+        setShowRecovery(false)
+        Taro.showToast({ title: '已恢复对局', icon: 'success' })
+      } else {
+        Taro.showToast({ title: '未找到进行中的对局', icon: 'none' })
+      }
+    } catch (error) {
+      console.error('恢复对局失败:', error)
+      Taro.showToast({ title: '恢复失败', icon: 'none' })
+    } finally {
+      setRecovering(false)
+    }
+  }
+
+  const finishGame = async () => {
+    if (!currentGame || !currentGroup) {
+      return
+    }
+
+    setFinishingGame(true)
+    try {
+      const res = await Network.request({
+        url: '/api/groups/game/finish',
+        method: 'POST',
+        data: {
+          group_id: currentGame.group_id,
+          invite_code: currentGame.invite_code,
+          participants: currentGame.participants,
+          rounds: currentGame.rounds,
+          total_rounds: currentGame.rounds.length,
+        },
+        header: getCurrentTokenHeader(),
+      })
+
+      const result = res.data as any
+      if (result.code !== 200) {
+        throw new Error(result.message || 'finish game failed')
+      }
+
+      clearGame()
+      setShowRecovery(false)
+      setRecoverySession(null)
+      Taro.showToast({ title: '对局已结束', icon: 'success' })
+    } catch (error) {
+      console.error('结束对局失败:', error)
+      Taro.showToast({ title: '结束对局失败', icon: 'none' })
+    } finally {
+      setFinishingGame(false)
+    }
+  }
+
+  const goToJoinPage = () => {
+    Taro.navigateTo({ url: '/pages/join/index' })
+  }
+
+  const copyInviteCode = () => {
+    if (!currentGroup?.invite_code) {
+      return
+    }
+
+    Taro.setClipboardData({
+      data: currentGroup.invite_code,
+      success: () => {
+        Taro.showToast({ title: '邀请码已复制', icon: 'success' })
+      },
+    })
+  }
+
+  const handleGivePoints = (member: Member) => {
     if (member.id === currentMember?.id) {
-      Taro.showToast({ title: '不能给自己给分', icon: 'none' })
+      Taro.showToast({ title: '不能给自己赠分', icon: 'none' })
+      return
+    }
+
+    if (!currentGame) {
+      Taro.showToast({ title: '请先开始对局', icon: 'none' })
       return
     }
 
@@ -261,25 +412,19 @@ export default function Index() {
   }
 
   const handleConfirmGive = async () => {
-    if (!selectedMember || !givePoints || !currentGroup) {
-      Taro.showToast({ title: '参数不完整', icon: 'none' })
+    if (!selectedMember || !currentGroup || !currentMember || !currentGame) {
+      Taro.showToast({ title: '请先开始对局', icon: 'none' })
       return
     }
 
-    if (!currentMember) {
-      Taro.showToast({ title: '用户未登录', icon: 'none' })
-      return
-    }
-
-    const points = parseInt(givePoints, 10)
+    const points = Number.parseInt(givePoints, 10)
     if (Number.isNaN(points) || points <= 0) {
-      Taro.showToast({ title: '请输入有效的积分', icon: 'none' })
+      Taro.showToast({ title: '请输入有效积分', icon: 'none' })
       return
     }
 
     setGiving(true)
     try {
-      const token = Taro.getStorageSync('token')
       const res = await Network.request({
         url: '/api/points/give',
         method: 'POST',
@@ -290,32 +435,111 @@ export default function Index() {
           points,
           reason: '积分赠送',
         },
-        header: token ? { Authorization: `Bearer ${token}` } : {},
+        header: getCurrentTokenHeader(),
       })
 
       const result = res.data as any
-      console.log('给分响应:', result)
-
-      if (result.code === 200) {
-        Taro.showToast({ title: `已赠送${points}积分`, icon: 'none' })
-        setShowGivePanel(false)
-        setGivePoints('')
-        setSelectedMember(null)
-
-        if (result.data?.members) {
-          syncMembersState(result.data.members)
-        } else if (Array.isArray(result.data)) {
-          syncMembersState(result.data)
-        }
-      } else {
-        Taro.showToast({ title: result.msg || '给分失败', icon: 'none' })
+      if (result.code !== 200) {
+        throw new Error(result.message || 'give points failed')
       }
-    } catch (err) {
-      console.error('给分失败:', err)
+
+      const latestMembers: Member[] = Array.isArray(result.data?.members) ? result.data.members : members
+      syncMembersState(latestMembers)
+
+      const nextSession: GameSession = {
+        ...currentGame,
+        participants: applyRoundToParticipants(
+          currentGame.participants,
+          currentMember.id,
+          selectedMember.id,
+          points
+        ),
+        rounds: [
+          ...currentGame.rounds,
+          {
+            record_id: result.data?.record?.id,
+            from: currentMember.name,
+            from_id: currentMember.id,
+            to: selectedMember.name,
+            to_id: selectedMember.id,
+            points,
+            reason: '积分赠送',
+            timestamp: Date.now(),
+          },
+        ],
+      }
+
+      await saveGameSession(nextSession)
+      setCurrentGame(nextSession)
+      setShowGivePanel(false)
+      setSelectedMember(null)
+      setGivePoints('')
+      Taro.showToast({ title: `已赠送 ${points} 积分`, icon: 'none' })
+    } catch (error) {
+      console.error('给分失败:', error)
       Taro.showToast({ title: '给分失败', icon: 'none' })
     } finally {
       setGiving(false)
     }
+  }
+
+  const handleUndoLastRound = async () => {
+    if (!currentGame || currentGame.rounds.length === 0 || !currentGroup) {
+      Taro.showToast({ title: '当前没有可撤销的记录', icon: 'none' })
+      return
+    }
+
+    const lastRound = currentGame.rounds[currentGame.rounds.length - 1]
+    if (!lastRound.record_id) {
+      Taro.showToast({ title: '这条记录暂不支持撤销', icon: 'none' })
+      return
+    }
+
+    setUndoing(true)
+    try {
+      const res = await Network.request({
+        url: '/api/points/revoke',
+        method: 'POST',
+        data: {
+          group_id: currentGroup.id,
+          record_id: lastRound.record_id,
+        },
+        header: getCurrentTokenHeader(),
+      })
+
+      const result = res.data as any
+      if (result.code !== 200) {
+        throw new Error(result.message || 'revoke points failed')
+      }
+
+      const latestMembers: Member[] = Array.isArray(result.data?.members) ? result.data.members : members
+      syncMembersState(latestMembers)
+
+      const nextSession: GameSession = {
+        ...currentGame,
+        participants: applyRoundToParticipants(
+          currentGame.participants,
+          lastRound.to_id,
+          lastRound.from_id,
+          lastRound.points
+        ),
+        rounds: currentGame.rounds.slice(0, -1),
+      }
+
+      await saveGameSession(nextSession)
+      setCurrentGame(nextSession)
+      Taro.showToast({ title: '已撤销上一手', icon: 'success' })
+    } catch (error) {
+      console.error('撤销上一手失败:', error)
+      Taro.showToast({ title: '撤销失败', icon: 'none' })
+    } finally {
+      setUndoing(false)
+    }
+  }
+
+  const getMemberGameScore = (memberId: string) => {
+    const participant = currentGame?.participants.find((item) => item.member_id === memberId)
+    return participant?.score ?? null
   }
 
   const renderEmptyState = () => (
@@ -327,11 +551,13 @@ export default function Index() {
       <Text className="mb-8 block text-center text-sm text-gray-500">
         创建房间或加入好友的房间{'\n'}开始积分互赠
       </Text>
-      <View className="w-full max-w-xs space-y-3">
-        <Button className="w-full" onClick={goToJoinPage}>
-          <Plus size={18} color="#fff" className="mr-2" />
-          <Text className="block">创建房间</Text>
-        </Button>
+      <View className="w-full max-w-xs">
+        <View className="mb-3">
+          <Button className="w-full" onClick={goToJoinPage}>
+            <Plus size={18} color="#fff" className="mr-2" />
+            <Text className="block">创建房间</Text>
+          </Button>
+        </View>
         <Button variant="outline" className="w-full" onClick={goToJoinPage}>
           <LogIn size={18} color="#1890ff" className="mr-2" />
           <Text className="block">加入房间</Text>
@@ -339,6 +565,168 @@ export default function Index() {
       </View>
     </View>
   )
+
+  const renderGameBanner = () => (
+    <Card className="mb-4 border-blue-100 bg-blue-50">
+      <CardContent className="p-4">
+        <View className="flex items-start justify-between">
+          <View className="flex-1 pr-3">
+            <Text className="block text-sm font-semibold text-blue-700">
+              {currentGame ? '本局进行中' : '还没有开始对局'}
+            </Text>
+            <Text className="mt-1 block text-xs text-blue-600">
+              {currentGame
+                ? `当前已记录 ${currentGame.rounds.length} 次给分`
+                : '开始对局后，每次给分都会进入本局记录'}
+            </Text>
+          </View>
+          {currentGame ? (
+            <View className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleUndoLastRound}
+                disabled={undoing || currentGame.rounds.length === 0}
+              >
+                <RefreshCcw size={14} color="#1890ff" className="mr-1" />
+                <Text className="block">{undoing ? '撤销中...' : '撤销上一手'}</Text>
+              </Button>
+              <Button size="sm" onClick={finishGame} disabled={finishingGame}>
+                <Square size={14} color="#fff" className="mr-1" />
+                <Text className="block">{finishingGame ? '结束中...' : '结束对局'}</Text>
+              </Button>
+            </View>
+          ) : (
+            <Button size="sm" onClick={startGame} disabled={savingGame}>
+              <Play size={14} color="#fff" className="mr-1" />
+              <Text className="block">{savingGame ? '创建中...' : '开始对局'}</Text>
+            </Button>
+          )}
+        </View>
+      </CardContent>
+    </Card>
+  )
+
+  const renderRoundsPanel = () => {
+    if (!currentGame) {
+      return null
+    }
+
+    const rounds = [...currentGame.rounds].reverse()
+
+    return (
+      <Card className="mb-4">
+        <CardContent className="p-4">
+          <View className="flex items-center justify-between">
+            <Text className="block text-sm font-semibold text-gray-800">本局回合记录</Text>
+            <Text className="block text-xs text-gray-400">{currentGame.rounds.length} 条</Text>
+          </View>
+
+          {rounds.length === 0 ? (
+            <Text className="mt-3 block text-sm text-gray-400">还没有给分记录</Text>
+          ) : (
+            <View className="mt-3">
+              {rounds.map((round, index) => (
+                <View
+                  key={`${round.timestamp}_${round.from_id}_${round.to_id}_${index}`}
+                  className={`${index === 0 ? '' : 'mt-3 border-t border-gray-100 pt-3'}`}
+                >
+                  <Text className="block text-sm text-gray-800">
+                    {round.from} 给了 {round.to} {round.points} 分
+                  </Text>
+                  <Text className="mt-1 block text-xs text-gray-400">
+                    {new Date(round.timestamp).toLocaleTimeString()}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const renderRecoveryBanner = () => {
+    if (!showRecovery || !recoverySession) {
+      return null
+    }
+
+    return (
+      <View className="fixed bottom-20 left-4 right-4 z-50 rounded-xl bg-white p-4 shadow-lg">
+        <Text className="block text-sm font-medium text-gray-800">检测到未结束的对局</Text>
+        <Text className="mt-1 block text-xs text-gray-500">
+          已记录 {recoverySession.rounds?.length || 0} 次给分，要继续还是重新开局？
+        </Text>
+        <View className="mt-3 flex gap-2">
+          <Button variant="outline" size="sm" className="flex-1" onClick={startGame} disabled={savingGame}>
+            <Text className="block">{savingGame ? '重开中...' : '重新开局'}</Text>
+          </Button>
+          <Button size="sm" className="flex-1" onClick={handleRecoverSession} disabled={recovering}>
+            <RefreshCw size={14} color="#fff" className="mr-1" />
+            <Text className="block">{recovering ? '恢复中...' : '恢复对局'}</Text>
+          </Button>
+        </View>
+      </View>
+    )
+  }
+
+  const renderGivePanel = () => {
+    if (!showGivePanel || !selectedMember) {
+      return null
+    }
+
+    return (
+      <View className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <View className="w-full max-w-sm rounded-2xl bg-white p-6">
+          <Text className="mb-1 block text-center text-lg font-semibold text-gray-800">赠送积分</Text>
+          <Text className="mb-6 block text-center text-sm text-gray-500">送给 {selectedMember.name}</Text>
+
+          <View className="mb-4 rounded-xl bg-gray-50 px-4 py-3">
+            <Text className="mb-1 block text-xs text-gray-400">积分</Text>
+            <Text className="block text-3xl font-bold text-blue-600">{givePoints || '0'}</Text>
+            <Text className="mt-2 block text-xs text-gray-400">我的总积分: {currentMember?.total_points || 0}</Text>
+          </View>
+
+          <View className="mb-4 rounded-xl bg-gray-50 px-4 py-3">
+            <Input
+              type="number"
+              placeholder="输入积分"
+              value={givePoints}
+              onInput={(event: any) => setGivePoints(event.detail.value || '')}
+              className="w-full bg-transparent text-lg"
+            />
+          </View>
+
+          <View className="mb-4 flex flex-row gap-2">
+            {[1, 5, 10, 20].map((amount) => (
+              <View key={amount} className="flex-1">
+                <Button variant="outline" size="sm" className="w-full" onClick={() => setGivePoints(String(amount))}>
+                  <Text className="block">{amount}</Text>
+                </Button>
+              </View>
+            ))}
+          </View>
+
+          <View className="flex flex-row gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                setShowGivePanel(false)
+                setSelectedMember(null)
+                setGivePoints('')
+              }}
+            >
+              <Text className="block">取消</Text>
+            </Button>
+            <Button className="flex-1" onClick={handleConfirmGive} disabled={giving || !givePoints}>
+              <Text className="block">{giving ? '赠送中...' : '确认赠送'}</Text>
+            </Button>
+          </View>
+        </View>
+      </View>
+    )
+  }
 
   const renderRoomContent = () => (
     <View className="flex min-h-screen flex-col bg-gray-50 pb-20">
@@ -372,113 +760,70 @@ export default function Index() {
       </View>
 
       <ScrollView scrollY className="flex-1 px-4 py-4">
+        {renderGameBanner()}
+        {renderRoundsPanel()}
         <View className="space-y-3">
-          {members.map((member: any) => (
-            <Card key={member.id} className="overflow-hidden">
-              <CardContent className="p-4">
-                <View className="flex items-center">
-                  <Avatar className="mr-3 h-12 w-12">
-                    <AvatarFallback className="bg-blue-100 text-blue-600">
-                      <Text className="block text-lg font-semibold">
-                        {member.name?.charAt(0) || member.name?.slice(0, 2) || '?'}
-                      </Text>
-                    </AvatarFallback>
-                  </Avatar>
+          {members.map((member) => {
+            const gameScore = getMemberGameScore(member.id)
 
-                  <View className="flex-1">
-                    <View className="flex items-center">
-                      <Text className="block text-base font-medium text-gray-800">{member.name}</Text>
-                      {member.id === currentMember?.id && (
-                        <View className="ml-2 rounded bg-blue-100 px-2 py-1 text-xs text-blue-600">我</View>
+            return (
+              <Card key={member.id} className="overflow-hidden">
+                <CardContent className="p-4">
+                  <View className="flex items-center">
+                    <Avatar className="mr-3 h-12 w-12">
+                      <AvatarFallback className="bg-blue-100 text-blue-600">
+                        <Text className="block text-lg font-semibold">
+                          {member.name?.charAt(0) || member.name?.slice(0, 2) || '?'}
+                        </Text>
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <View className="flex-1">
+                      <View className="flex items-center">
+                        <Text className="block text-base font-medium text-gray-800">{member.name}</Text>
+                        {member.id === currentMember?.id && (
+                          <View className="ml-2 rounded bg-blue-100 px-2 py-1">
+                            <Text className="block text-xs text-blue-600">我</Text>
+                          </View>
+                        )}
+                        {(member as any).is_creator && <Crown size={14} color="#f59e0b" className="ml-1" />}
+                      </View>
+                      <Text className="mt-1 block text-sm text-gray-400">总积分: {member.total_points || 0}</Text>
+                      {currentGame && (
+                        <Text
+                          className={`mt-1 block text-xs ${
+                            (gameScore || 0) > 0
+                              ? 'text-green-600'
+                              : (gameScore || 0) < 0
+                                ? 'text-red-500'
+                                : 'text-blue-600'
+                          }`}
+                        >
+                          本局分数: {gameScore === null ? '-' : `${gameScore > 0 ? '+' : ''}${gameScore}`}
+                        </Text>
                       )}
-                      {member.is_creator && <Crown size={14} color="#f59e0b" className="ml-1" />}
                     </View>
-                    <Text className="mt-1 block text-sm text-gray-400">积分: {member.total_points || 0}</Text>
-                  </View>
 
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex items-center"
-                    onClick={() => handleGivePoints(member)}
-                    disabled={member.id === currentMember?.id}
-                  >
-                    <Gift size={14} color="#1890ff" className="mr-1" />
-                    <Text className="block text-sm">送积分</Text>
-                  </Button>
-                </View>
-              </CardContent>
-            </Card>
-          ))}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex items-center"
+                      onClick={() => handleGivePoints(member)}
+                      disabled={member.id === currentMember?.id || !currentGame}
+                    >
+                      <Gift size={14} color="#1890ff" className="mr-1" />
+                      <Text className="block text-sm">送积分</Text>
+                    </Button>
+                  </View>
+                </CardContent>
+              </Card>
+            )
+          })}
         </View>
       </ScrollView>
 
-      {showRecovery && (
-        <View className="fixed bottom-20 left-4 right-4 z-50 rounded-xl bg-white p-4 shadow-lg">
-          <Text className="mb-3 block text-sm text-gray-600">检测到有进行中的对局，是否恢复？</Text>
-          <View className="flex gap-2">
-            <Button variant="outline" size="sm" className="flex-1" onClick={handleNewGame}>
-              <Text className="block">新对局</Text>
-            </Button>
-            <Button size="sm" className="flex-1" onClick={handleRecoverSession} disabled={recovering}>
-              <RefreshCw size={14} color="#fff" className="mr-1" />
-              <Text className="block">{recovering ? '恢复中...' : '恢复对局'}</Text>
-            </Button>
-          </View>
-        </View>
-      )}
-
-      {showGivePanel && selectedMember && (
-        <View className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 px-4">
-          <View className="w-full max-w-sm rounded-2xl bg-white p-6">
-            <Text className="mb-1 block text-center text-lg font-semibold text-gray-800">赠送积分</Text>
-            <Text className="mb-6 block text-center text-sm text-gray-500">送给 {selectedMember.name}</Text>
-
-            <View className="mb-4 rounded-xl bg-gray-50 px-4 py-3">
-              <Text className="mb-1 block text-xs text-gray-400">积分</Text>
-              <Text className="block text-3xl font-bold text-blue-600">{givePoints || '0'}</Text>
-              <Text className="mt-2 block text-xs text-gray-400">当前积分: {currentMember?.total_points || 0}</Text>
-            </View>
-
-            <View className="mb-4 rounded-xl bg-gray-50 px-4 py-3">
-              <Input
-                type="number"
-                placeholder="输入积分"
-                value={givePoints}
-                onInput={(e: any) => setGivePoints(e.detail.value || '')}
-                className="w-full bg-transparent text-lg"
-              />
-            </View>
-
-            <View className="mb-4 flex flex-row gap-2">
-              {[1, 5, 10, 20].map((amount) => (
-                <View key={amount} className="flex-1">
-                  <Button variant="outline" size="sm" className="w-full" onClick={() => setGivePoints(amount.toString())}>
-                    <Text className="block">{amount}</Text>
-                  </Button>
-                </View>
-              ))}
-            </View>
-
-            <View className="flex flex-row gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => {
-                  setShowGivePanel(false)
-                  setGivePoints('')
-                  setSelectedMember(null)
-                }}
-              >
-                <Text className="block">取消</Text>
-              </Button>
-              <Button className="flex-1" onClick={handleConfirmGive} disabled={giving || !givePoints}>
-                <Text className="block">{giving ? '赠送中...' : '确认赠送'}</Text>
-              </Button>
-            </View>
-          </View>
-        </View>
-      )}
+      {renderRecoveryBanner()}
+      {renderGivePanel()}
     </View>
   )
 
