@@ -188,13 +188,28 @@ export class GroupsController {
     @Headers('authorization') authHeader?: string
   ) {
     const token = authHeader?.replace('Bearer ', '') || ''
+    console.log('[game/save] request', {
+      invite_code: body.invite_code,
+      group_id: body.group_id,
+      participants: Array.isArray(body.participants) ? body.participants.length : -1,
+      rounds: Array.isArray(body.rounds) ? body.rounds.length : -1,
+    })
     const session = await this.groupsService.saveGameSession(token, body)
 
     if (session) {
       const latestSession = await this.groupsService.getCurrentGameSession(token, body.invite_code)
+      console.log('[game/save] broadcasting gameSessionUpdated', {
+        invite_code: body.invite_code,
+        session_id: (latestSession || session as any)?.id,
+        started: body.rounds.length === 0,
+      })
       await this.gameGateway.broadcastToRoom(body.invite_code, 'gameSessionUpdated', {
         session: latestSession || session,
         started: body.rounds.length === 0
+      })
+    } else {
+      console.log('[game/save] saveGameSession returned null', {
+        invite_code: body.invite_code,
       })
     }
 

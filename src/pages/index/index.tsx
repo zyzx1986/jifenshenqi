@@ -161,6 +161,13 @@ export default function Index() {
     }
 
     try {
+      console.log('[index] syncCurrentSessionState:start', {
+        inviteCode: currentGroup.invite_code,
+        isRoomHost,
+        hasCurrentGame: Boolean(currentGame),
+        skipWhenCurrentGameReady: Boolean(options?.skipWhenCurrentGameReady),
+      })
+
       const res = await Network.request({
         url: '/api/groups/game/current',
         method: 'GET',
@@ -169,23 +176,37 @@ export default function Index() {
       })
 
       const result = res.data as any
+      console.log('[index] syncCurrentSessionState:result', {
+        code: result?.code,
+        hasSession: Boolean(result?.data),
+        sessionId: result?.data?.id,
+      })
       if (result.code === 200 && result.data) {
         const nextSession = normalizeGameSession(result.data)
         if (isRoomHost) {
           if (!currentGame || currentGame.invite_code !== currentGroup.invite_code) {
+            console.log('[index] syncCurrentSessionState:host-recovery', {
+              sessionId: nextSession.id,
+            })
             setRecoverySession(nextSession)
             setShowRecovery(true)
           }
         } else {
+          console.log('[index] syncCurrentSessionState:setCurrentGame', {
+            sessionId: nextSession.id,
+            rounds: nextSession.rounds.length,
+          })
           setCurrentGame(nextSession)
           setRecoverySession(null)
           setShowRecovery(false)
         }
       } else {
         if (isRoomHost) {
+          console.log('[index] syncCurrentSessionState:host-no-session')
           setRecoverySession(null)
           setShowRecovery(false)
         } else if (currentGame?.invite_code === currentGroup.invite_code) {
+          console.log('[index] syncCurrentSessionState:clearCurrentGame')
           clearGame()
         }
       }
@@ -227,6 +248,11 @@ export default function Index() {
     }
 
     const handleRoomState = (data: any) => {
+      console.log('[index] roomState', {
+        memberCount: Array.isArray(data?.members) ? data.members.length : -1,
+        hasCurrentGame: Boolean(data?.currentGame),
+        sessionId: data?.currentGame?.id,
+      })
       if (Array.isArray(data?.members)) {
         syncMembersState(data.members)
       }
@@ -259,6 +285,11 @@ export default function Index() {
     }
 
     const handleGameSessionUpdated = (data: any) => {
+      console.log('[index] gameSessionUpdated', {
+        hasSession: Boolean(data?.session),
+        sessionId: data?.session?.id,
+        started: Boolean(data?.started),
+      })
       if (!data?.session) {
         return
       }
@@ -400,7 +431,14 @@ export default function Index() {
         status: 'playing',
       }
 
+      console.log('[index] startGame:submit', {
+        inviteCode: currentGroup.invite_code,
+        participants: session.participants.length,
+      })
       await saveGameSession(session)
+      console.log('[index] startGame:saveGameSession-done', {
+        inviteCode: currentGroup.invite_code,
+      })
       setCurrentGame(session)
       setShowRecovery(false)
       setRecoverySession(null)
