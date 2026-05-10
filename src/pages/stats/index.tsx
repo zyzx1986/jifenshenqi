@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import Taro from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import { ScrollView, Text, View } from '@tarojs/components'
 import { Crown, Gamepad2, Trophy } from 'lucide-react-taro'
 import { Button } from '@/components/ui/button'
@@ -74,6 +74,12 @@ export default function Stats() {
     setStats(null)
     setLoading(false)
   }, [currentGroup?.invite_code])
+
+  useDidShow(() => {
+    if (currentGroup?.invite_code) {
+      loadStats()
+    }
+  })
 
   const loadStats = async () => {
     if (!currentGroup?.invite_code) {

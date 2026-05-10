@@ -205,7 +205,7 @@ export class GroupsController {
     @Headers('authorization') authHeader?: string
   ) {
     const token = authHeader?.replace('Bearer ', '') || ''
-    const history = await this.groupsService.finishGameSession(token, body)
+    const history = await this.groupsService.finishGameSessionV2(token, body)
 
     if (history) {
       const members = await this.groupsService.getGroupMembers(body.group_id)
@@ -217,8 +217,8 @@ export class GroupsController {
     }
 
     return {
-      code: 200,
-      message: 'success',
+      code: history ? 200 : 500,
+      message: history ? 'success' : 'failed',
       data: history
     }
   }

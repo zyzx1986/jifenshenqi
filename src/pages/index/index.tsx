@@ -30,20 +30,14 @@ function applyRoundToParticipants(
   fromMemberId: string,
   toMemberId: string,
   points: number
-): Participant[] {
+) {
   return participants.map((participant) => {
     if (participant.member_id === fromMemberId) {
-      return {
-        ...participant,
-        score: (participant.score || 0) - points,
-      }
+      return { ...participant, score: (participant.score || 0) - points }
     }
 
     if (participant.member_id === toMemberId) {
-      return {
-        ...participant,
-        score: (participant.score || 0) + points,
-      }
+      return { ...participant, score: (participant.score || 0) + points }
     }
 
     return participant
@@ -76,6 +70,12 @@ export default function Index() {
   const [undoing, setUndoing] = useState(false)
 
   const hasRoom = Boolean(currentGroup)
+  const isRoomHost = Boolean(currentGroup && currentMember && currentGroup.creator_id === currentMember.user_id)
+
+  const getCurrentTokenHeader = () => {
+    const token = Taro.getStorageSync('token')
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
 
   const syncMembersState = (nextMembers: Member[]) => {
     setMembers(nextMembers)
@@ -91,11 +91,6 @@ export default function Index() {
         ...nextCurrentMember,
       })
     }
-  }
-
-  const getCurrentTokenHeader = () => {
-    const token = Taro.getStorageSync('token')
-    return token ? { Authorization: `Bearer ${token}` } : {}
   }
 
   const saveGameSession = async (session: GameSession) => {
@@ -203,19 +198,11 @@ export default function Index() {
       if (Array.isArray(data?.members)) {
         syncMembersState(data.members)
       }
-
-      if (data?.memberName) {
-        Taro.showToast({ title: `${data.memberName} 加入了房间`, icon: 'none' })
-      }
     }
 
     const handleMemberLeft = (data: any) => {
       if (Array.isArray(data?.members)) {
         syncMembersState(data.members)
-      }
-
-      if (data?.memberName) {
-        Taro.showToast({ title: `${data.memberName} 离开了房间`, icon: 'none' })
       }
     }
 
@@ -230,7 +217,7 @@ export default function Index() {
       clearGame()
       setShowRecovery(false)
       setRecoverySession(null)
-      Taro.showToast({ title: '本局已结束', icon: 'none' })
+      Taro.showToast({ title: '对局已结束', icon: 'none' })
     }
 
     gameSocket.on('roomState', handleRoomState)
@@ -280,6 +267,11 @@ export default function Index() {
   })
 
   const startGame = async () => {
+    if (!isRoomHost) {
+      Taro.showToast({ title: '只有房主可以开始对局', icon: 'none' })
+      return
+    }
+
     if (!currentGroup || !currentMember || members.length === 0) {
       Taro.showToast({ title: '当前房间暂无可开局成员', icon: 'none' })
       return
@@ -312,6 +304,11 @@ export default function Index() {
   }
 
   const handleRecoverSession = async () => {
+    if (!isRoomHost) {
+      Taro.showToast({ title: '只有房主可以恢复对局', icon: 'none' })
+      return
+    }
+
     if (!currentGroup) {
       return
     }
@@ -343,6 +340,11 @@ export default function Index() {
   }
 
   const finishGame = async () => {
+    if (!isRoomHost) {
+      Taro.showToast({ title: '只有房主可以结束对局', icon: 'none' })
+      return
+    }
+
     if (!currentGame || !currentGroup) {
       return
     }
@@ -358,12 +360,13 @@ export default function Index() {
           participants: currentGame.participants,
           rounds: currentGame.rounds,
           total_rounds: currentGame.rounds.length,
+          room_name: currentGame.room_name,
         },
         header: getCurrentTokenHeader(),
       })
 
       const result = res.data as any
-      if (result.code !== 200) {
+      if (result.code !== 200 || !result.data) {
         throw new Error(result.message || 'finish game failed')
       }
 
@@ -379,8 +382,63 @@ export default function Index() {
     }
   }
 
-  const goToJoinPage = () => {
-    Taro.navigateTo({ url: '/pages/join/index' })
+  const handleUndoLastRound = async () => {
+    if (!isRoomHost) {
+      Taro.showToast({ title: '只有房主可以撤销上一手', icon: 'none' })
+      return
+    }
+
+    if (!currentGame || currentGame.rounds.length === 0 || !currentGroup) {
+      Taro.showToast({ title: '当前没有可撤销的记录', icon: 'none' })
+      return
+    }
+
+    const lastRound = currentGame.rounds[currentGame.rounds.length - 1]
+    if (!lastRound.record_id) {
+      Taro.showToast({ title: '这条记录暂不支持撤销', icon: 'none' })
+      return
+    }
+
+    setUndoing(true)
+    try {
+      const res = await Network.request({
+        url: '/api/points/revoke',
+        method: 'POST',
+        data: {
+          group_id: currentGroup.id,
+          record_id: lastRound.record_id,
+        },
+        header: getCurrentTokenHeader(),
+      })
+
+      const result = res.data as any
+      if (result.code !== 200) {
+        throw new Error(result.message || 'revoke points failed')
+      }
+
+      const latestMembers: Member[] = Array.isArray(result.data?.members) ? result.data.members : members
+      syncMembersState(latestMembers)
+
+      const nextSession: GameSession = {
+        ...currentGame,
+        participants: applyRoundToParticipants(
+          currentGame.participants,
+          lastRound.to_id,
+          lastRound.from_id,
+          lastRound.points
+        ),
+        rounds: currentGame.rounds.slice(0, -1),
+      }
+
+      await saveGameSession(nextSession)
+      setCurrentGame(nextSession)
+      Taro.showToast({ title: '已撤销上一手', icon: 'success' })
+    } catch (error) {
+      console.error('撤销上一手失败:', error)
+      Taro.showToast({ title: '撤销失败', icon: 'none' })
+    } finally {
+      setUndoing(false)
+    }
   }
 
   const copyInviteCode = () => {
@@ -483,65 +541,6 @@ export default function Index() {
     }
   }
 
-  const handleUndoLastRound = async () => {
-    if (!currentGame || currentGame.rounds.length === 0 || !currentGroup) {
-      Taro.showToast({ title: '当前没有可撤销的记录', icon: 'none' })
-      return
-    }
-
-    const lastRound = currentGame.rounds[currentGame.rounds.length - 1]
-    if (!lastRound.record_id) {
-      Taro.showToast({ title: '这条记录暂不支持撤销', icon: 'none' })
-      return
-    }
-
-    setUndoing(true)
-    try {
-      const res = await Network.request({
-        url: '/api/points/revoke',
-        method: 'POST',
-        data: {
-          group_id: currentGroup.id,
-          record_id: lastRound.record_id,
-        },
-        header: getCurrentTokenHeader(),
-      })
-
-      const result = res.data as any
-      if (result.code !== 200) {
-        throw new Error(result.message || 'revoke points failed')
-      }
-
-      const latestMembers: Member[] = Array.isArray(result.data?.members) ? result.data.members : members
-      syncMembersState(latestMembers)
-
-      const nextSession: GameSession = {
-        ...currentGame,
-        participants: applyRoundToParticipants(
-          currentGame.participants,
-          lastRound.to_id,
-          lastRound.from_id,
-          lastRound.points
-        ),
-        rounds: currentGame.rounds.slice(0, -1),
-      }
-
-      await saveGameSession(nextSession)
-      setCurrentGame(nextSession)
-      Taro.showToast({ title: '已撤销上一手', icon: 'success' })
-    } catch (error) {
-      console.error('撤销上一手失败:', error)
-      Taro.showToast({ title: '撤销失败', icon: 'none' })
-    } finally {
-      setUndoing(false)
-    }
-  }
-
-  const getMemberGameScore = (memberId: string) => {
-    const participant = currentGame?.participants.find((item) => item.member_id === memberId)
-    return participant?.score ?? null
-  }
-
   const renderEmptyState = () => (
     <View className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-6">
       <View className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-blue-100">
@@ -553,12 +552,12 @@ export default function Index() {
       </Text>
       <View className="w-full max-w-xs">
         <View className="mb-3">
-          <Button className="w-full" onClick={goToJoinPage}>
+          <Button className="w-full" onClick={() => Taro.navigateTo({ url: '/pages/join/index' })}>
             <Plus size={18} color="#fff" className="mr-2" />
             <Text className="block">创建房间</Text>
           </Button>
         </View>
-        <Button variant="outline" className="w-full" onClick={goToJoinPage}>
+        <Button variant="outline" className="w-full" onClick={() => Taro.navigateTo({ url: '/pages/join/index' })}>
           <LogIn size={18} color="#1890ff" className="mr-2" />
           <Text className="block">加入房间</Text>
         </Button>
@@ -572,15 +571,16 @@ export default function Index() {
         <View className="flex items-start justify-between">
           <View className="flex-1 pr-3">
             <Text className="block text-sm font-semibold text-blue-700">
-              {currentGame ? '本局进行中' : '还没有开始对局'}
+              {currentGame ? '当前有进行中的对局' : '当前还没有开始对局'}
             </Text>
             <Text className="mt-1 block text-xs text-blue-600">
-              {currentGame
-                ? `当前已记录 ${currentGame.rounds.length} 次给分`
-                : '开始对局后，每次给分都会进入本局记录'}
+              {currentGame ? `当前已记录 ${currentGame.rounds.length} 次给分` : '开始后大家就可以互相给分'}
             </Text>
+            {!isRoomHost && (
+              <Text className="mt-2 block text-xs text-amber-600">只有房主可以开始、结束和撤销上一手</Text>
+            )}
           </View>
-          {currentGame ? (
+          {isRoomHost && currentGame ? (
             <View className="flex gap-2">
               <Button
                 size="sm"
@@ -596,55 +596,16 @@ export default function Index() {
                 <Text className="block">{finishingGame ? '结束中...' : '结束对局'}</Text>
               </Button>
             </View>
-          ) : (
+          ) : isRoomHost ? (
             <Button size="sm" onClick={startGame} disabled={savingGame}>
               <Play size={14} color="#fff" className="mr-1" />
               <Text className="block">{savingGame ? '创建中...' : '开始对局'}</Text>
             </Button>
-          )}
+          ) : null}
         </View>
       </CardContent>
     </Card>
   )
-
-  const renderRoundsPanel = () => {
-    if (!currentGame) {
-      return null
-    }
-
-    const rounds = [...currentGame.rounds].reverse()
-
-    return (
-      <Card className="mb-4">
-        <CardContent className="p-4">
-          <View className="flex items-center justify-between">
-            <Text className="block text-sm font-semibold text-gray-800">本局回合记录</Text>
-            <Text className="block text-xs text-gray-400">{currentGame.rounds.length} 条</Text>
-          </View>
-
-          {rounds.length === 0 ? (
-            <Text className="mt-3 block text-sm text-gray-400">还没有给分记录</Text>
-          ) : (
-            <View className="mt-3">
-              {rounds.map((round, index) => (
-                <View
-                  key={`${round.timestamp}_${round.from_id}_${round.to_id}_${index}`}
-                  className={`${index === 0 ? '' : 'mt-3 border-t border-gray-100 pt-3'}`}
-                >
-                  <Text className="block text-sm text-gray-800">
-                    {round.from} 给了 {round.to} {round.points} 分
-                  </Text>
-                  <Text className="mt-1 block text-xs text-gray-400">
-                    {new Date(round.timestamp).toLocaleTimeString()}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
 
   const renderRecoveryBanner = () => {
     if (!showRecovery || !recoverySession) {
@@ -655,17 +616,21 @@ export default function Index() {
       <View className="fixed bottom-20 left-4 right-4 z-50 rounded-xl bg-white p-4 shadow-lg">
         <Text className="block text-sm font-medium text-gray-800">检测到未结束的对局</Text>
         <Text className="mt-1 block text-xs text-gray-500">
-          已记录 {recoverySession.rounds?.length || 0} 次给分，要继续还是重新开局？
+          已记录 {recoverySession.rounds?.length || 0} 次给分
         </Text>
-        <View className="mt-3 flex gap-2">
-          <Button variant="outline" size="sm" className="flex-1" onClick={startGame} disabled={savingGame}>
-            <Text className="block">{savingGame ? '重开中...' : '重新开局'}</Text>
-          </Button>
-          <Button size="sm" className="flex-1" onClick={handleRecoverSession} disabled={recovering}>
-            <RefreshCw size={14} color="#fff" className="mr-1" />
-            <Text className="block">{recovering ? '恢复中...' : '恢复对局'}</Text>
-          </Button>
-        </View>
+        {isRoomHost ? (
+          <View className="mt-3 flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1" onClick={startGame} disabled={savingGame}>
+              <Text className="block">{savingGame ? '重开中...' : '重新开局'}</Text>
+            </Button>
+            <Button size="sm" className="flex-1" onClick={handleRecoverSession} disabled={recovering}>
+              <RefreshCw size={14} color="#fff" className="mr-1" />
+              <Text className="block">{recovering ? '恢复中...' : '恢复对局'}</Text>
+            </Button>
+          </View>
+        ) : (
+          <Text className="mt-3 block text-xs text-amber-600">等待房主决定是否恢复这局对局</Text>
+        )}
       </View>
     )
   }
@@ -761,10 +726,9 @@ export default function Index() {
 
       <ScrollView scrollY className="flex-1 px-4 py-4">
         {renderGameBanner()}
-        {renderRoundsPanel()}
         <View className="space-y-3">
           {members.map((member) => {
-            const gameScore = getMemberGameScore(member.id)
+            const memberIsHost = currentGroup?.creator_id === member.user_id
 
             return (
               <Card key={member.id} className="overflow-hidden">
@@ -786,22 +750,21 @@ export default function Index() {
                             <Text className="block text-xs text-blue-600">我</Text>
                           </View>
                         )}
-                        {(member as any).is_creator && <Crown size={14} color="#f59e0b" className="ml-1" />}
+                        {memberIsHost && <Crown size={14} color="#f59e0b" className="ml-1" />}
                       </View>
-                      <Text className="mt-1 block text-sm text-gray-400">总积分: {member.total_points || 0}</Text>
-                      {currentGame && (
-                        <Text
-                          className={`mt-1 block text-xs ${
-                            (gameScore || 0) > 0
-                              ? 'text-green-600'
-                              : (gameScore || 0) < 0
-                                ? 'text-red-500'
-                                : 'text-blue-600'
-                          }`}
-                        >
-                          本局分数: {gameScore === null ? '-' : `${gameScore > 0 ? '+' : ''}${gameScore}`}
-                        </Text>
-                      )}
+                      <Text className="mt-2 block text-xs text-gray-400">累计总积分</Text>
+                      <Text
+                        className={`block text-2xl font-bold ${
+                          member.total_points > 0
+                            ? 'text-green-600'
+                            : member.total_points < 0
+                              ? 'text-red-500'
+                              : 'text-blue-600'
+                        }`}
+                      >
+                        {member.total_points > 0 ? '+' : ''}
+                        {member.total_points || 0}
+                      </Text>
                     </View>
 
                     <Button

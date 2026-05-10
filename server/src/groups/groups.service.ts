@@ -950,4 +950,72 @@ export class GroupsService {
       }
     })
   }
+  async finishGameSessionV2(token: string, data: {
+    group_id: string
+    invite_code: string
+    participants: any[]
+    rounds: any[]
+    total_rounds: number
+  }) {
+    try {
+      const userId = this.verifyToken(token)
+      if (!userId) {
+        return null
+      }
+
+      const { data: group, error: groupError } = await this.client
+        .from('groups')
+        .select('name, creator_id')
+        .eq('id', data.group_id)
+        .single()
+
+      if (groupError || !group) {
+        console.error('查询房间失败:', groupError)
+        return null
+      }
+
+      if (group.creator_id !== userId) {
+        throw new Error('只有房主可以结束对局')
+      }
+
+      const { error: sessionError } = await this.client
+        .from('game_sessions')
+        .update({
+          status: 'finished',
+          updated_at: new Date().toISOString()
+        })
+        .eq('group_id', data.group_id)
+        .eq('status', 'playing')
+
+      if (sessionError) {
+        console.error('更新对局状态失败:', sessionError)
+        return null
+      }
+
+      const { data: history, error: historyError } = await this.client
+        .from('game_history')
+        .insert({
+          group_id: data.group_id,
+          room_name: group.name || '房间',
+          invite_code: data.invite_code,
+          participants: JSON.stringify(data.participants || []),
+          rounds: JSON.stringify(data.rounds || []),
+          total_rounds: data.total_rounds,
+          start_time: new Date(Date.now() - data.total_rounds * 60000).toISOString(),
+          end_time: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      if (historyError || !history) {
+        console.error('写入战绩失败:', historyError)
+        return null
+      }
+
+      return history
+    } catch (error) {
+      console.error('结束对局失败:', error)
+      return null
+    }
+  }
 }
