@@ -184,6 +184,7 @@ export class GroupsController {
       invite_code: string
       participants: any[]
       rounds: any[]
+      user_id?: string
     },
     @Headers('authorization') authHeader?: string
   ) {

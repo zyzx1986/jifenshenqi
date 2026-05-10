@@ -124,6 +124,7 @@ export default function Index() {
         invite_code: session.invite_code,
         participants: session.participants,
         rounds: trimSessionRounds(session.rounds),
+        user_id: currentMember?.user_id,
       },
       header: getCurrentTokenHeader(),
     })

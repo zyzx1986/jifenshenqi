@@ -9,6 +9,22 @@ export class GroupsService {
   private client = getSupabaseClient()
   private jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
   private revokedReasonPrefix = '[REVOKED]'
+  private parseJsonArray<T>(value: unknown): T[] {
+    if (Array.isArray(value)) {
+      return value as T[]
+    }
+
+    if (typeof value !== 'string' || !value) {
+      return []
+    }
+
+    try {
+      return JSON.parse(value) as T[]
+    } catch (error) {
+      console.error('parseJsonArray failed:', error)
+      return []
+    }
+  }
 
   // 验证 token 并返回用户 ID
   private verifyToken(token: string): string {
@@ -558,18 +574,55 @@ export class GroupsService {
     invite_code: string
     participants: any[]
     rounds: any[]
+    user_id?: string
   }) {
     try {
-      const userId = this.verifyToken(token)
+      let userId = data.user_id || ''
+      if (!userId && token) {
+        userId = this.verifyToken(token)
+      }
       if (!userId) return null
 
+      const { data: group, error: groupError } = await this.client
+        .from('groups')
+        .select('creator_id')
+        .eq('id', data.group_id)
+        .maybeSingle()
+
+      if (groupError || !group) {
+        console.error('saveGameSession load group failed:', groupError)
+        return null
+      }
+
+      const { data: member, error: memberError } = await this.client
+        .from('members')
+        .select('id')
+        .eq('group_id', data.group_id)
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (memberError || !member) {
+        console.error('saveGameSession forbidden: user is not group member', {
+          group_id: data.group_id,
+          invite_code: data.invite_code,
+          user_id: userId,
+          memberError,
+        })
+        return null
+      }
+
       // 先查找是否有正在进行中的对局
-      const { data: existing } = await this.client
+      const { data: existing, error: existingError } = await this.client
         .from('game_sessions')
         .select('*')
         .eq('group_id', data.group_id)
         .eq('status', 'playing')
-        .single()
+        .maybeSingle()
+
+      if (existingError) {
+        console.error('saveGameSession query existing session failed:', existingError)
+        return null
+      }
 
       const sessionData = {
         group_id: data.group_id,
@@ -577,27 +630,39 @@ export class GroupsService {
         invite_code: data.invite_code,
         participants: JSON.stringify(data.participants),
         rounds: JSON.stringify(data.rounds),
-        host_id: userId,
+        host_id: existing?.host_id || (group as any).creator_id,
         status: 'playing',
         updated_at: new Date().toISOString()
       }
 
       if (existing) {
         // 更新现有对局
-        const { data: updated } = await this.client
+        const { data: updated, error: updateError } = await this.client
           .from('game_sessions')
           .update(sessionData)
           .eq('id', existing.id)
           .select()
           .single()
+
+        if (updateError) {
+          console.error('saveGameSession update session failed:', updateError)
+          return null
+        }
+
         return updated
       } else {
         // 创建新对局
-        const { data: created } = await this.client
+        const { data: created, error: createError } = await this.client
           .from('game_sessions')
           .insert(sessionData)
           .select()
           .single()
+
+        if (createError) {
+          console.error('saveGameSession create session failed:', createError)
+          return null
+        }
+
         return created
       }
     } catch (error) {
