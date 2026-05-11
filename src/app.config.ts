@@ -53,10 +53,12 @@ export default defineAppConfig({
       }
     ]
   },
-  plugins: {
-    WechatSI: {
-      version: '0.3.5',
-      provider: 'wx069ba97219f66d99'
-    }
-  }
+  // WechatSI 语音插件 - 需要在微信公众平台开通插件权限
+  // 申请地址: 设置 -> 第三方设置 -> 插件管理 -> 添加插件 -> 搜索 WechatSI
+  // plugins: {
+  //   WechatSI: {
+  //     version: '0.3.5',
+  //     provider: 'wx069ba97219f66d99'
+  //   }
+  // }
 })
