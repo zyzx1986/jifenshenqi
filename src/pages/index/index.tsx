@@ -10,6 +10,7 @@ import { Network } from '@/network'
 import { type GameSession, type Member, type Participant, useGroupStore } from '@/stores/group'
 import { gameSocket } from '@/utils/gameSocket'
 import { getCachedWechatAvatarUrl } from '@/utils/wechatNickname'
+import { buildScoreBroadcastText, speakScoreBroadcast } from '@/utils/voice'
 import './index.scss'
 
 type RecoverySession = GameSession | null
@@ -329,6 +330,21 @@ export default function Index() {
       if (Array.isArray(data?.members)) {
         syncMembersState(data.members)
       }
+
+      if (data?.reversed) {
+        return
+      }
+
+      const latestMembers: Member[] = Array.isArray(data?.members) ? data.members : members
+      const fromMember = latestMembers.find((member) => member.id === data?.fromMemberId)
+      const toMember = latestMembers.find((member) => member.id === data?.toMemberId)
+      const points = Number(data?.points || 0)
+
+      if (!fromMember?.name || !toMember?.name || points <= 0) {
+        return
+      }
+
+      void speakScoreBroadcast(buildScoreBroadcastText(fromMember.name, toMember.name, points))
     }
 
     const handleGameSessionUpdated = (data: any) => {
