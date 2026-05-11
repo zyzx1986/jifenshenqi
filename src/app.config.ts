@@ -53,10 +53,12 @@ export default defineAppConfig({
       }
     ]
   },
-  plugins: {
-    WechatSI: {
-      version: '0.3.5',
-      provider: 'wx069ba97219f66d99'
-    }
-  }
+  // 注意：WechatSI 语音插件需要正式的微信小程序 AppID 才能使用
+  // 如果需要语音功能，请在微信公众平台申请插件并配置正确的 AppID
+  // plugins: {
+  //   WechatSI: {
+  //     version: '0.3.5',
+  //     provider: 'wx069ba97219f66d99'
+  //   }
+  // }
 })
