@@ -73,6 +73,29 @@ function resetMemberScores(nextMembers: Member[]): Member[] {
   }))
 }
 
+function mergeMemberAvatar(
+  nextMembers: Member[],
+  currentMembers: Member[],
+  currentMember: Member | null
+): Member[] {
+  const avatarMap = new Map<string, string>()
+
+  currentMembers.forEach((member) => {
+    if (member.avatar_url) {
+      avatarMap.set(member.id, member.avatar_url)
+    }
+  })
+
+  if (currentMember?.avatar_url) {
+    avatarMap.set(currentMember.id, currentMember.avatar_url)
+  }
+
+  return nextMembers.map((member) => ({
+    ...member,
+    avatar_url: member.avatar_url || avatarMap.get(member.id) || '',
+  }))
+}
+
 export default function Index() {
   const {
     currentGame,
@@ -107,13 +130,14 @@ export default function Index() {
   }
 
   const syncMembersState = (nextMembers: Member[]) => {
-    setMembers(nextMembers)
+    const mergedMembers = mergeMemberAvatar(nextMembers, members, currentMember)
+    setMembers(mergedMembers)
 
     if (!currentMember) {
       return
     }
 
-    const nextCurrentMember = nextMembers.find((member) => member.id === currentMember.id)
+    const nextCurrentMember = mergedMembers.find((member) => member.id === currentMember.id)
     if (nextCurrentMember) {
       setCurrentMember({
         ...currentMember,
@@ -389,9 +413,9 @@ export default function Index() {
       return
     }
 
+    connectWebSocket()
     loadMembers()
     syncCurrentSessionState()
-    connectWebSocket()
   })
 
   useEffect(() => {
