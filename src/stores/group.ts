@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
-import { create } from 'zustand'
+import { useSyncExternalStore } from 'react'
+import { createStore } from 'zustand/vanilla'
 
 interface Member {
   id: string
@@ -88,7 +89,7 @@ function persistCurrentGame(game: GameSession | null) {
   Taro.removeStorageSync('currentGame')
 }
 
-export const useGroupStore = create<GroupState>((set) => {
+const groupStore = createStore<GroupState>()((set) => {
   const savedGroup = Taro.getStorageSync('currentGroup') || null
   const savedMember = Taro.getStorageSync('currentMember') || null
   const savedGame = Taro.getStorageSync('currentGame') || null
@@ -174,4 +175,25 @@ export const useGroupStore = create<GroupState>((set) => {
   }
 })
 
+function getGroupSnapshot() {
+  return groupStore.getState()
+}
+
+function useGroupStore(): GroupState
+function useGroupStore<T>(selector: (state: GroupState) => T): T
+function useGroupStore<T>(selector?: (state: GroupState) => T) {
+  return useSyncExternalStore(
+    groupStore.subscribe,
+    () => {
+      const state = getGroupSnapshot()
+      return selector ? selector(state) : state
+    },
+    () => {
+      const state = getGroupSnapshot()
+      return selector ? selector(state) : state
+    }
+  )
+}
+
 export type { GameSession, Group, Member, Participant, PointsRecord, Round }
+export { groupStore, useGroupStore }

@@ -234,7 +234,7 @@ export default function Index() {
     }
   }
 
-  const syncCurrentSessionState = async (options?: { skipWhenCurrentGameReady?: boolean }) => {
+  const syncCurrentSessionState = async (options?: { skipWhenCurrentGameReady?: boolean; silent?: boolean }) => {
     if (!currentGroup) {
       return
     }
@@ -244,13 +244,6 @@ export default function Index() {
     }
 
     try {
-      console.log('[index] syncCurrentSessionState:start', {
-        inviteCode: currentGroup.invite_code,
-        isRoomHost,
-        hasCurrentGame: Boolean(currentGame),
-        skipWhenCurrentGameReady: Boolean(options?.skipWhenCurrentGameReady),
-      })
-
       const res = await Network.request({
         url: '/api/groups/game/current',
         method: 'GET',
@@ -259,37 +252,23 @@ export default function Index() {
       })
 
       const result = res.data as any
-      console.log('[index] syncCurrentSessionState:result', {
-        code: result?.code,
-        hasSession: Boolean(result?.data),
-        sessionId: result?.data?.id,
-      })
       if (result.code === 200 && result.data) {
         const nextSession = normalizeGameSession(result.data)
         if (isRoomHost) {
           if (!currentGame || currentGame.invite_code !== currentGroup.invite_code) {
-            console.log('[index] syncCurrentSessionState:host-recovery', {
-              sessionId: nextSession.id,
-            })
             setRecoverySession(nextSession)
             setShowRecovery(true)
           }
         } else {
-          console.log('[index] syncCurrentSessionState:setCurrentGame', {
-            sessionId: nextSession.id,
-            rounds: nextSession.rounds.length,
-          })
           setCurrentGame(nextSession)
           setRecoverySession(null)
           setShowRecovery(false)
         }
       } else {
         if (isRoomHost) {
-          console.log('[index] syncCurrentSessionState:host-no-session')
           setRecoverySession(null)
           setShowRecovery(false)
         } else if (currentGame?.invite_code === currentGroup.invite_code) {
-          console.log('[index] syncCurrentSessionState:clearCurrentGame')
           syncMembersState(resetMemberScores(members))
           clearGame()
         }
@@ -490,11 +469,13 @@ export default function Index() {
 
     const timer = setInterval(() => {
       void loadMembers()
-      void syncCurrentSessionState({ skipWhenCurrentGameReady: true })
+      if (!isRoomHost || currentGame?.invite_code === currentGroup.invite_code || showRecovery) {
+        void syncCurrentSessionState({ skipWhenCurrentGameReady: true })
+      }
     }, 2000)
 
     return () => clearInterval(timer)
-  }, [connected, currentGroup?.invite_code, currentMember?.id])
+  }, [connected, currentGame?.invite_code, currentGroup?.invite_code, currentMember?.id, isRoomHost, showRecovery])
 
   useDidHide(() => {
     gameSocket.disconnect()
