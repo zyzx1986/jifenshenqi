@@ -73,7 +73,7 @@ const HistoryPage = () => {
         roomId: currentGroup.invite_code,
         memberId: currentMember.id,
         memberName: currentMember.name,
-        userId: Taro.getStorageSync('userId') || '',
+        userId: currentMember.user_id || Taro.getStorageSync('userId') || '',
         avatarUrl: currentMember.avatar_url || getCachedWechatAvatarUrl(),
       })
     }
