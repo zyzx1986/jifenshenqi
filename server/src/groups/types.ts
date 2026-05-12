@@ -12,6 +12,7 @@ export interface Member {
   name: string
   avatar_url?: string
   total_points: number
+  room_total_points?: number
   created_at: string
   updated_at: string | null
 }

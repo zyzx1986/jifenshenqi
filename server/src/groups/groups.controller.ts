@@ -11,12 +11,12 @@ export class GroupsController {
 
   @Post('create')
   async createGroup(
-    @Body() body: { name: string; member_name: string; user_id?: string },
+    @Body() body: { name: string; member_name: string; user_id?: string; avatar_url?: string },
     @Headers('authorization') _authHeader?: string
   ) {
     const { name, member_name } = body
     const userId = body.user_id || `user_${Date.now()}`
-    const result = await this.groupsService.createGroup(name, member_name, userId)
+    const result = await this.groupsService.createGroup(name, member_name, userId, body.avatar_url)
 
     return {
       code: 200,
@@ -27,12 +27,18 @@ export class GroupsController {
 
   @Post('join')
   async joinGroup(
-    @Body() body: { invite_code: string; member_name: string; user_id?: string },
+    @Body() body: { invite_code: string; member_name: string; user_id?: string; avatar_url?: string },
     @Headers('authorization') authHeader?: string
   ) {
     const { invite_code, member_name } = body
     const token = authHeader?.replace('Bearer ', '') || ''
-    const result = await this.groupsService.joinGroup(invite_code, member_name, token, body.user_id)
+    const result = await this.groupsService.joinGroup(
+      invite_code,
+      member_name,
+      token,
+      body.user_id,
+      body.avatar_url
+    )
 
     if (result.isNewMember) {
       const members = this.gameGateway.decorateRoomMembers(

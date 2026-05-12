@@ -7,6 +7,7 @@ interface Member {
   name: string
   avatar_url?: string
   total_points: number
+  room_total_points?: number
   total_given: number
   total_received: number
   received_count: number

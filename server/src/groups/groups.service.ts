@@ -36,7 +36,12 @@ export class GroupsService {
     }
   }
 
-  async createGroup(name: string, memberName: string, userId: string): Promise<{ group: Group; member: Member }> {
+  async createGroup(
+    name: string,
+    memberName: string,
+    userId: string,
+    avatarUrl?: string
+  ): Promise<{ group: Group; member: Member }> {
     // const userId = `user_${Date.now()}` // 改为传入 userId
     const inviteCode = this.generateInviteCode()
 
@@ -64,6 +69,7 @@ export class GroupsService {
         group_id: group.id,
         user_id: userId,
         name: memberName,
+        avatar_url: avatarUrl || null,
         total_points: 0
       })
       .select()
@@ -92,7 +98,8 @@ export class GroupsService {
     inviteCode: string,
     memberName: string,
     token?: string,
-    fallbackUserId?: string
+    fallbackUserId?: string,
+    avatarUrl?: string
   ): Promise<{ group: Group; member: Member; isNewMember: boolean }> {
     // 如果有 token，从 token 中获取 userId；否则生成临时 userId
     let userId: string;
@@ -132,7 +139,38 @@ export class GroupsService {
       .maybeSingle()
 
     if (existingMember) {
-      return { group, member: existingMember as Member, isNewMember: false }
+      const shouldUpdateAvatar = Boolean(avatarUrl) && (existingMember as any).avatar_url !== avatarUrl
+      const shouldUpdateName = Boolean(memberName) && (existingMember as any).name !== memberName
+
+      if (!shouldUpdateAvatar && !shouldUpdateName) {
+        return { group, member: existingMember as Member, isNewMember: false }
+      }
+
+      const payload: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      }
+
+      if (shouldUpdateName) {
+        payload.name = memberName
+      }
+
+      if (shouldUpdateAvatar) {
+        payload.avatar_url = avatarUrl
+      }
+
+      const { data: updatedMember, error: updateMemberError } = await this.client
+        .from('members')
+        .update(payload)
+        .eq('id', (existingMember as any).id)
+        .select()
+        .single()
+
+      if (updateMemberError) {
+        console.error('更新房间成员资料失败:', updateMemberError)
+        throw new Error(`更新房间成员资料失败: ${updateMemberError.message}`)
+      }
+
+      return { group, member: updatedMember as Member, isNewMember: false }
     }
 
     // 创建成员
@@ -142,6 +180,7 @@ export class GroupsService {
         group_id: group.id,
         user_id: userId,
         name: memberName,
+        avatar_url: avatarUrl || null,
         total_points: 0
       })
       .select()
@@ -166,7 +205,7 @@ export class GroupsService {
       console.error('查询成员失败:', error)
       throw new Error(`查询成员失败: ${error.message}`)
     }
-    return (data || []) as Member[]
+    return this.attachRoomTotalPoints(groupId, (data || []) as Member[])
   }
 
   async getGroupInviteCode(groupId: string): Promise<string | null> {
@@ -284,9 +323,56 @@ export class GroupsService {
       .eq('group_id', groupId)
 
     return {
-      members: (members || []) as Member[],
+      members: await this.attachRoomTotalPoints(groupId, (members || []) as Member[]),
       record: (recordData || null) as PointsRecord | null
     }
+  }
+
+  private async attachRoomTotalPoints(groupId: string, members: Member[]): Promise<Member[]> {
+    if (!members.length) {
+      return members
+    }
+
+    const { data: records, error } = await this.client
+      .from('points_records')
+      .select('from_member_id, to_member_id, points, reason')
+      .eq('group_id', groupId)
+
+    if (error) {
+      console.error('query room total points failed:', error)
+      return members.map((member) => ({
+        ...member,
+        room_total_points: 0,
+      }))
+    }
+
+    const totalMap = new Map<string, number>()
+    members.forEach((member) => totalMap.set(member.id, 0))
+
+    ;(records || []).forEach((record: any) => {
+      const reason = record?.reason || ''
+      if (reason.startsWith(this.revokedReasonPrefix)) {
+        return
+      }
+
+      const points = Number(record?.points || 0)
+      if (!points) {
+        return
+      }
+
+      if (record?.from_member_id && totalMap.has(record.from_member_id)) {
+        totalMap.set(record.from_member_id, (totalMap.get(record.from_member_id) || 0) - points)
+      }
+
+      if (record?.to_member_id && totalMap.has(record.to_member_id)) {
+        totalMap.set(record.to_member_id, (totalMap.get(record.to_member_id) || 0) + points)
+      }
+    })
+
+    return members.map((member) => ({
+      ...member,
+      room_total_points: totalMap.get(member.id) || 0,
+    }))
   }
 
   async revokePointsRecord(groupId: string, recordId: string): Promise<{ members: Member[]; recordId: string }> {
@@ -363,7 +449,7 @@ export class GroupsService {
       .eq('group_id', groupId)
 
     return {
-      members: (members || []) as Member[],
+      members: await this.attachRoomTotalPoints(groupId, (members || []) as Member[]),
       recordId
     }
   }

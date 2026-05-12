@@ -116,6 +116,7 @@ export default function JoinPage() {
           name: groupName.trim(),
           member_name: nickname,
           user_id: userId,
+          avatar_url: avatarUrl,
         },
         header: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -164,6 +165,7 @@ export default function JoinPage() {
           invite_code: inviteCode.trim().toUpperCase(),
           member_name: nickname,
           user_id: userId,
+          avatar_url: avatarUrl,
         },
         header: token ? { Authorization: `Bearer ${token}` } : {},
       })

@@ -10,6 +10,7 @@ interface Member {
   id: string
   name: string
   total_points: number
+  room_total_points?: number
   group_id: string
   user_id: string
 }
@@ -35,7 +36,11 @@ const RankingPage = () => {
       console.log('加载成员列表:', res.data)
       const memberList = res.data?.data || []
       setMembers(memberList)
-      setSortedMembers(memberList.sort((a, b) => b.total_points - a.total_points))
+      setSortedMembers(
+        memberList.sort(
+          (a, b) => (b.room_total_points || 0) - (a.room_total_points || 0)
+        )
+      )
     } catch (error) {
       console.error('加载成员失败:', error)
       showToast({ title: '加载失败', icon: 'none' })
@@ -119,10 +124,10 @@ const RankingPage = () => {
 
                     {/* 积分 */}
                     <Badge
-                      variant={member.total_points >= 0 ? "default" : "destructive"}
-                      className={member.total_points >= 0 ? "bg-blue-500" : "bg-red-500"}
+                      variant={(member.room_total_points || 0) >= 0 ? "default" : "destructive"}
+                      className={(member.room_total_points || 0) >= 0 ? "bg-blue-500" : "bg-red-500"}
                     >
-                      {member.total_points > 0 ? '+' : ''}{member.total_points}
+                      {(member.room_total_points || 0) > 0 ? '+' : ''}{member.room_total_points || 0}
                     </Badge>
                   </View>
                 </CardContent>
