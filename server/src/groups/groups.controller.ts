@@ -258,7 +258,10 @@ export class GroupsController {
 
     if (history) {
       await this.groupsService.resetGroupMemberPoints(body.group_id)
-      const members = await this.groupsService.getGroupMembers(body.group_id)
+      const members = this.gameGateway.decorateRoomMembers(
+        body.invite_code,
+        await this.groupsService.getGroupMembers(body.group_id)
+      )
       await this.gameGateway.broadcastToRoom(body.invite_code, 'gameEnded', {
         members,
         roomName: body.room_name || (history as any).room_name || '鎴块棿',
@@ -336,6 +339,24 @@ export class PointsController {
       reason: string
     }
   ) {
+    const inviteCode = await this.groupsService.getGroupInviteCode(body.group_id)
+    if (!inviteCode) {
+      return {
+        code: 500,
+        message: 'room not found',
+        data: null
+      }
+    }
+
+    const currentSession = await this.groupsService.getCurrentGameSession('', inviteCode)
+    if (!currentSession) {
+      return {
+        code: 409,
+        message: 'current game session already ended',
+        data: null
+      }
+    }
+
     const result = await this.groupsService.givePoints(
       body.group_id,
       body.from_member_id,
@@ -343,8 +364,6 @@ export class PointsController {
       body.points,
       body.reason
     )
-
-    const inviteCode = await this.groupsService.getGroupInviteCode(body.group_id)
 
     if (inviteCode) {
       const members = this.gameGateway.decorateRoomMembers(inviteCode, result.members)

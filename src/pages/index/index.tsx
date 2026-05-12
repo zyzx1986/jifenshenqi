@@ -147,6 +147,43 @@ export default function Index() {
     }
   }
 
+  const ensureActiveGameSession = async (options?: { silent?: boolean }) => {
+    if (!currentGroup) {
+      return false
+    }
+
+    try {
+      const res = await Network.request({
+        url: '/api/groups/game/current',
+        method: 'GET',
+        data: { invite_code: currentGroup.invite_code },
+        header: getCurrentTokenHeader(),
+      })
+
+      const result = res.data as any
+      if (result?.code === 200 && result?.data) {
+        const nextSession = normalizeGameSession(result.data)
+        setCurrentGame(nextSession)
+        setShowRecovery(false)
+        setRecoverySession(null)
+        return true
+      }
+    } catch (error) {
+      console.error('confirm active game session failed:', error)
+    }
+
+    syncMembersState(resetMemberScores(members))
+    clearGame()
+    setShowRecovery(false)
+    setRecoverySession(null)
+
+    if (!options?.silent) {
+      Taro.showToast({ title: '当前对局已结束', icon: 'none' })
+    }
+
+    return false
+  }
+
   const saveGameSession = async (session: GameSession) => {
     const res = await Network.request({
       url: '/api/groups/game/save',
@@ -310,6 +347,8 @@ export default function Index() {
         setShowRecovery(false)
         setRecoverySession(null)
       } else if (currentGame) {
+        const nextMembers: Member[] = Array.isArray(data?.members) ? data.members : members
+        syncMembersState(resetMemberScores(nextMembers))
         clearGame()
       }
     }
@@ -422,7 +461,7 @@ export default function Index() {
       gameSocket.off('hostTransferred', handleHostTransferred)
       gameSocket.off('gameAbandoned', handleGameAbandoned)
     }
-  }, [currentGroup, currentMember, clearGame, setCurrentGame, setCurrentGroup])
+  }, [clearGame, currentGame, currentGroup, currentMember, members, setCurrentGame, setCurrentGroup])
 
   useDidShow(() => {
     if (!currentGroup) {
@@ -435,20 +474,27 @@ export default function Index() {
   })
 
   useEffect(() => {
-    if (!currentGroup || !currentMember || isRoomHost) {
+    if (!currentGroup || !currentMember) {
       return
     }
 
-    if (currentGame?.invite_code === currentGroup.invite_code) {
+    connectWebSocket()
+    void loadMembers()
+    void syncCurrentSessionState({ skipWhenCurrentGameReady: true })
+  }, [currentGroup?.invite_code, currentMember?.id])
+
+  useEffect(() => {
+    if (!currentGroup || !currentMember || !connected) {
       return
     }
 
     const timer = setInterval(() => {
-      void syncCurrentSessionState()
-    }, 1500)
+      void loadMembers()
+      void syncCurrentSessionState({ skipWhenCurrentGameReady: true })
+    }, 2000)
 
     return () => clearInterval(timer)
-  }, [currentGame?.invite_code, currentGroup, currentMember, isRoomHost])
+  }, [connected, currentGroup?.invite_code, currentMember?.id])
 
   useDidHide(() => {
     gameSocket.disconnect()
@@ -672,7 +718,7 @@ export default function Index() {
     })
   }
 
-  const handleGivePoints = (member: Member) => {
+  const handleGivePoints = async (member: Member) => {
     if (member.id === currentMember?.id) {
       Taro.showToast({ title: '不能给自己赠分', icon: 'none' })
       return
@@ -683,6 +729,11 @@ export default function Index() {
       return
     }
 
+    const hasActiveSession = await ensureActiveGameSession()
+    if (!hasActiveSession) {
+      return
+    }
+
     setSelectedMember(member)
     setShowGivePanel(true)
   }
@@ -690,6 +741,12 @@ export default function Index() {
   const handleConfirmGive = async () => {
     if (!selectedMember || !currentGroup || !currentMember || !currentGame) {
       Taro.showToast({ title: '请先开始对局', icon: 'none' })
+      return
+    }
+
+    const hasActiveSession = await ensureActiveGameSession({ silent: true })
+    if (!hasActiveSession) {
+      Taro.showToast({ title: '当前对局已结束', icon: 'none' })
       return
     }
 

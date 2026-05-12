@@ -79,11 +79,13 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const members = await this.getRoomMembers(roomId)
     const currentGame = await this.getRoomCurrentSession(roomId)
     this.logger.log(`roomState -> ${memberName} room=${roomId} members=${members.length} hasCurrentGame=${Boolean(currentGame)}`)
-    client.emit('roomState', {
+    const roomState = {
       members,
       currentGame,
       memberCount: roomMap.size,
-    })
+    }
+    client.emit('roomState', roomState)
+    this.server.to(roomId).emit('roomState', roomState)
 
     return { success: true, members }
   }
