@@ -214,7 +214,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const { data: members } = await this.supabase
         .from('members')
-        .select('id, name, total_points, user_id, is_host')
+        .select('id, name, avatar_url, total_points, user_id, is_host')
         .eq('group_id', group.id)
 
       return this.decorateRoomMembers(roomId, members || [])
