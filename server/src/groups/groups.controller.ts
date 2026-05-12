@@ -163,9 +163,12 @@ export class GroupsController {
   }
 
   @Get('room-history')
-  async getUserRoomHistory(@Headers('authorization') authHeader?: string) {
+  async getUserRoomHistory(
+    @Query('user_id') userId?: string,
+    @Headers('authorization') authHeader?: string
+  ) {
     const token = authHeader?.replace('Bearer ', '') || ''
-    const history = await this.groupsService.getUserRoomHistory(token)
+    const history = await this.groupsService.getUserRoomHistory(token, userId)
     return {
       code: 200,
       message: 'success',

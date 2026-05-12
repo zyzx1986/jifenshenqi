@@ -50,6 +50,59 @@ export class GroupsService {
     return result
   }
 
+  private async ensureUserRoomHistoryRecord(
+    userId: string,
+    groupId: string,
+    roomName: string,
+    inviteCode: string
+  ) {
+    const { data: existingRecord, error: existingError } = await this.client
+      .from('user_rooms')
+      .select('id, room_name')
+      .eq('user_id', userId)
+      .eq('invite_code', inviteCode)
+      .maybeSingle()
+
+    if (existingError) {
+      console.error('query user room history failed:', existingError)
+      return false
+    }
+
+    if (existingRecord) {
+      if (existingRecord.room_name === roomName) {
+        return true
+      }
+
+      const { error: updateError } = await this.client
+        .from('user_rooms')
+        .update({ room_name: roomName })
+        .eq('id', existingRecord.id)
+
+      if (updateError) {
+        console.error('update user room history failed:', updateError)
+        return false
+      }
+
+      return true
+    }
+
+    const { error: insertError } = await this.client
+      .from('user_rooms')
+      .insert({
+        user_id: userId,
+        group_id: groupId,
+        room_name: roomName,
+        invite_code: inviteCode
+      })
+
+    if (insertError) {
+      console.error('insert user room history failed:', insertError)
+      return false
+    }
+
+    return true
+  }
+
   private parseJsonArray<T>(value: unknown): T[] {
     if (Array.isArray(value)) {
       return value as T[]
@@ -119,14 +172,7 @@ export class GroupsService {
     const member = memberData as Member
 
     // 记录到用户房间历史
-    await this.client
-      .from('user_rooms')
-      .insert({
-        user_id: userId,
-        group_id: group.id,
-        room_name: name,
-        invite_code: inviteCode
-      })
+    await this.ensureUserRoomHistoryRecord(userId, group.id, name, inviteCode)
 
     return { group, member }
   }
@@ -180,6 +226,7 @@ export class GroupsService {
       const shouldUpdateName = Boolean(memberName) && (existingMember as any).name !== memberName
 
       if (!shouldUpdateAvatar && !shouldUpdateName) {
+        await this.ensureUserRoomHistoryRecord(userId, group.id, group.name, group.invite_code)
         return { group, member: existingMember as Member, isNewMember: false }
       }
 
@@ -205,6 +252,7 @@ export class GroupsService {
         throw new Error(`更新房间成员资料失败: ${updateMemberError.message}`)
       }
 
+      await this.ensureUserRoomHistoryRecord(userId, group.id, group.name, group.invite_code)
       return { group, member: updatedMember as Member, isNewMember: false }
     }
 
@@ -223,6 +271,7 @@ export class GroupsService {
     }
     const member = memberData as Member
 
+    await this.ensureUserRoomHistoryRecord(userId, group.id, group.name, group.invite_code)
     return { group, member, isNewMember: true }
   }
 
@@ -530,7 +579,7 @@ export class GroupsService {
       if (token) {
         try {
           const decoded = jwt.verify(token, this.jwtSecret) as { userId: string }
-          userId = decoded.userId
+          userId = decoded.userId || userId
         } catch (e) {
           // 使用传入的 user_id
         }
@@ -637,10 +686,23 @@ export class GroupsService {
   }
 
   // 获取用户房间历史记录
-  async getUserRoomHistory(token: string): Promise<any[]> {
+  async getUserRoomHistory(token: string, fallbackUserId?: string): Promise<any[]> {
     try {
-      const decoded = jwt.verify(token, this.jwtSecret) as any
-      const userId = decoded.userId
+      let userId = fallbackUserId || ''
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, this.jwtSecret) as any
+          userId = decoded.userId || userId
+        } catch (error) {
+          if (!userId) {
+            throw error
+          }
+        }
+      }
+
+      if (!userId) {
+        return []
+      }
 
       const { data, error } = await this.client
         .from('user_rooms')
