@@ -9,6 +9,47 @@ export class GroupsService {
   private client = getSupabaseClient()
   private jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
   private revokedReasonPrefix = '[REVOKED]'
+
+  private isMissingAvatarColumnError(error: any) {
+    const message = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase()
+    return message.includes('avatar_url') && (message.includes('column') || message.includes('schema cache'))
+  }
+
+  private async insertMemberRecord(payload: Record<string, any>) {
+    const memberInsert = async (nextPayload: Record<string, any>) =>
+      this.client
+        .from('members')
+        .insert(nextPayload)
+        .select()
+        .single()
+
+    let result = await memberInsert(payload)
+    if (result.error && payload.avatar_url && this.isMissingAvatarColumnError(result.error)) {
+      const { avatar_url: _avatarUrl, ...fallbackPayload } = payload
+      result = await memberInsert(fallbackPayload)
+    }
+
+    return result
+  }
+
+  private async updateMemberProfile(memberId: string, payload: Record<string, any>) {
+    const updateMember = async (nextPayload: Record<string, any>) =>
+      this.client
+        .from('members')
+        .update(nextPayload)
+        .eq('id', memberId)
+        .select()
+        .single()
+
+    let result = await updateMember(payload)
+    if (result.error && payload.avatar_url && this.isMissingAvatarColumnError(result.error)) {
+      const { avatar_url: _avatarUrl, ...fallbackPayload } = payload
+      result = await updateMember(fallbackPayload)
+    }
+
+    return result
+  }
+
   private parseJsonArray<T>(value: unknown): T[] {
     if (Array.isArray(value)) {
       return value as T[]
@@ -63,17 +104,13 @@ export class GroupsService {
     const group = groupData as Group
 
     // 创建成员
-    const { data: memberData, error: memberError } = await this.client
-      .from('members')
-      .insert({
-        group_id: group.id,
-        user_id: userId,
-        name: memberName,
-        avatar_url: avatarUrl || null,
-        total_points: 0
-      })
-      .select()
-      .single()
+    const { data: memberData, error: memberError } = await this.insertMemberRecord({
+      group_id: group.id,
+      user_id: userId,
+      name: memberName,
+      avatar_url: avatarUrl || null,
+      total_points: 0
+    })
 
     if (memberError) {
       console.error('创建成员失败:', memberError)
@@ -158,12 +195,10 @@ export class GroupsService {
         payload.avatar_url = avatarUrl
       }
 
-      const { data: updatedMember, error: updateMemberError } = await this.client
-        .from('members')
-        .update(payload)
-        .eq('id', (existingMember as any).id)
-        .select()
-        .single()
+      const { data: updatedMember, error: updateMemberError } = await this.updateMemberProfile(
+        (existingMember as any).id,
+        payload
+      )
 
       if (updateMemberError) {
         console.error('更新房间成员资料失败:', updateMemberError)
@@ -174,17 +209,13 @@ export class GroupsService {
     }
 
     // 创建成员
-    const { data: memberData, error: memberError } = await this.client
-      .from('members')
-      .insert({
-        group_id: group.id,
-        user_id: userId,
-        name: memberName,
-        avatar_url: avatarUrl || null,
-        total_points: 0
-      })
-      .select()
-      .single()
+    const { data: memberData, error: memberError } = await this.insertMemberRecord({
+      group_id: group.id,
+      user_id: userId,
+      name: memberName,
+      avatar_url: avatarUrl || null,
+      total_points: 0
+    })
 
     if (memberError) {
       console.error('加入群组失败:', memberError)

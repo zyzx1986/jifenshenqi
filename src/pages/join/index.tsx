@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button as NativeButton, Text, View } from '@tarojs/components'
 import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro'
 import { Check, Copy, RefreshCw, Users } from 'lucide-react-taro'
@@ -37,6 +37,8 @@ export default function JoinPage() {
   const [loading, setLoading] = useState(false)
   const [createdGroup, setCreatedGroup] = useState<any>(null)
   const [copied, setCopied] = useState(false)
+  const [choosingAvatar, setChoosingAvatar] = useState(false)
+  const chooseAvatarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isWeapp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP
 
@@ -51,9 +53,37 @@ export default function JoinPage() {
     if (cachedAvatarUrl) {
       setAvatarUrl(cachedAvatarUrl)
     }
+
+    return () => {
+      if (chooseAvatarTimerRef.current) {
+        clearTimeout(chooseAvatarTimerRef.current)
+        chooseAvatarTimerRef.current = null
+      }
+    }
   }, [])
 
+  const resetChooseAvatarLock = () => {
+    if (chooseAvatarTimerRef.current) {
+      clearTimeout(chooseAvatarTimerRef.current)
+      chooseAvatarTimerRef.current = null
+    }
+    setChoosingAvatar(false)
+  }
+
+  const handleChooseAvatarStart = () => {
+    if (choosingAvatar) {
+      Taro.showToast({ title: '头像选择中，请稍候', icon: 'none' })
+      return
+    }
+
+    setChoosingAvatar(true)
+    chooseAvatarTimerRef.current = setTimeout(() => {
+      resetChooseAvatarLock()
+    }, 3000)
+  }
+
   const handleChooseAvatar = (event: any) => {
+    resetChooseAvatarLock()
     const nextAvatarUrl = event?.detail?.avatarUrl || ''
     if (!nextAvatarUrl) {
       return
@@ -247,8 +277,9 @@ export default function JoinPage() {
         </Avatar>
         {isWeapp ? (
           <NativeButton
-            openType="chooseAvatar"
+            openType={choosingAvatar ? undefined : ('chooseAvatar' as any)}
             className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-600"
+            onClick={handleChooseAvatarStart}
             onChooseAvatar={handleChooseAvatar}
           >
             选择微信头像
