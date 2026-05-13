@@ -1,13 +1,16 @@
 import { PropsWithChildren } from 'react';
 import { LucideTaroProvider } from 'lucide-react-taro';
 import '@/app.css';
+import { PrivacyAuthorizationProvider } from '@/components/privacy/privacy-authorization-provider';
 import { Toaster } from '@/components/ui/toast';
 import { Preset } from './presets';
 
 const App = ({ children }: PropsWithChildren) => {
   return (
     <LucideTaroProvider defaultColor="#000" defaultSize={24}>
-      <Preset>{children}</Preset>
+      <PrivacyAuthorizationProvider>
+        <Preset>{children}</Preset>
+      </PrivacyAuthorizationProvider>
       <Toaster />
     </LucideTaroProvider>
   );
