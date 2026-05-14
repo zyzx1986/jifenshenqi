@@ -9,7 +9,12 @@ export interface WechatProfile {
 }
 
 function normalizeWechatNickname(nickname: string): string {
-  return nickname.trim()
+  const trimmedNickname = nickname.trim()
+  if (!trimmedNickname || trimmedNickname === '微信用户') {
+    return ''
+  }
+
+  return trimmedNickname
 }
 
 export function getCachedWechatNickname(): string {
@@ -41,7 +46,28 @@ export function cacheWechatProfile(profile: Partial<WechatProfile>) {
 }
 
 export async function fetchWechatNicknameWithPrompt(): Promise<string> {
-  return getCachedWechatNickname()
+  const cachedNickname = getCachedWechatNickname()
+  if (cachedNickname) {
+    return cachedNickname
+  }
+
+  return new Promise<string>((resolve) => {
+    if (Taro.getEnv() === Taro.ENV_TYPE.WEAPP && Taro.canIUse('getUserProfile')) {
+      Taro.getUserProfile({
+        desc: '用于设置昵称和头像',
+        success: (res) => {
+          const nickname = normalizeWechatNickname(res.userInfo?.nickName || '')
+          const avatarUrl = res.userInfo?.avatarUrl || ''
+          cacheWechatProfile({ nickname, avatarUrl })
+          resolve(nickname)
+        },
+        fail: () => resolve(''),
+      })
+      return
+    }
+
+    resolve('')
+  })
 }
 
 export async function resolveNickname(inputNickname: string): Promise<string> {

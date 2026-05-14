@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { View, Text } from '@tarojs/components'
-import Taro, { navigateTo, showModal, showToast, switchTab, useDidShow } from '@tarojs/taro'
+import Taro, { navigateTo, setClipboardData, showModal, showToast, switchTab, useDidShow } from '@tarojs/taro'
 import { ChartBarBig, History } from 'lucide-react-taro'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

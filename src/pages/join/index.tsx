@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button as NativeButton, Text, View } from '@tarojs/components'
 import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro'
-import { RefreshCw, Users } from 'lucide-react-taro'
+import { Check, Copy, RefreshCw, Users } from 'lucide-react-taro'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,8 +17,8 @@ import {
   resolveNickname,
 } from '@/utils/wechatNickname'
 
-const ROOM_NAME_PREFIXES = ['东风', '南风', '红中', '发财', '白板', '连庄', '牌友', '和牌']
-const ROOM_NAME_SUFFIXES = ['牌局', '麻将局', '搓麻局', '好友局', '对战局', '练手局']
+const ROOM_NAME_PREFIXES = ['东风', '南风', '红中', '发财', '白板', '雀神', '牌友', '和牌']
+const ROOM_NAME_SUFFIXES = ['牌局', '麻将房', '搓麻局', '友人局', '对战房', '练手局']
 
 function createRandomRoomName() {
   const prefix = ROOM_NAME_PREFIXES[Math.floor(Math.random() * ROOM_NAME_PREFIXES.length)]
@@ -36,6 +36,9 @@ export default function JoinPage() {
   const [avatarUrl, setAvatarUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [createdGroup, setCreatedGroup] = useState<any>(null)
+  const [copied, setCopied] = useState(false)
+  const [choosingAvatar, setChoosingAvatar] = useState(false)
+  const chooseAvatarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isWeapp = Taro.getEnv() === Taro.ENV_TYPE.WEAPP
 
@@ -50,7 +53,45 @@ export default function JoinPage() {
     if (cachedAvatarUrl) {
       setAvatarUrl(cachedAvatarUrl)
     }
+
+    return () => {
+      if (chooseAvatarTimerRef.current) {
+        clearTimeout(chooseAvatarTimerRef.current)
+        chooseAvatarTimerRef.current = null
+      }
+    }
   }, [])
+
+  const resetChooseAvatarLock = () => {
+    if (chooseAvatarTimerRef.current) {
+      clearTimeout(chooseAvatarTimerRef.current)
+      chooseAvatarTimerRef.current = null
+    }
+    setChoosingAvatar(false)
+  }
+
+  const handleChooseAvatarStart = () => {
+    if (choosingAvatar) {
+      Taro.showToast({ title: '头像选择中，请稍候', icon: 'none' })
+      return
+    }
+
+    setChoosingAvatar(true)
+    chooseAvatarTimerRef.current = setTimeout(() => {
+      resetChooseAvatarLock()
+    }, 3000)
+  }
+
+  const handleChooseAvatar = (event: any) => {
+    resetChooseAvatarLock()
+    const nextAvatarUrl = event?.detail?.avatarUrl || ''
+    if (!nextAvatarUrl) {
+      return
+    }
+
+    setAvatarUrl(nextAvatarUrl)
+    cacheWechatProfile({ nickname: memberName, avatarUrl: nextAvatarUrl })
+  }
 
   const handleNameInput = (value: string) => {
     setMemberName(value)
@@ -179,16 +220,18 @@ export default function JoinPage() {
     }
   }
 
-  const showInviteCode = () => {
+  const copyInviteCode = () => {
     if (!createdGroup?.invite_code) {
       return
     }
 
-    Taro.showModal({
-      title: '邀请码',
-      content: createdGroup.invite_code,
-      showCancel: false,
-      confirmText: '知道了',
+    Taro.setClipboardData({
+      data: createdGroup.invite_code,
+      success: () => {
+        setCopied(true)
+        Taro.showToast({ title: '已复制', icon: 'none' })
+        setTimeout(() => setCopied(false), 2000)
+      },
     })
   }
 
@@ -216,7 +259,7 @@ export default function JoinPage() {
     }
 
     return {
-      title: '快乐计分神器',
+      title: '积分互赠小程序',
       path: '/pages/join/index',
       imageUrl: '',
     }
@@ -232,18 +275,31 @@ export default function JoinPage() {
             <Text className="block text-sm font-semibold">{memberName.slice(0, 1) || '我'}</Text>
           </AvatarFallback>
         </Avatar>
-        <Text className="block text-xs text-gray-400">当前版本使用默认头像，不调用微信头像能力</Text>
+        {isWeapp ? (
+          <NativeButton
+            openType={choosingAvatar ? undefined : ('chooseAvatar' as any)}
+            className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-600"
+            onClick={handleChooseAvatarStart}
+            onChooseAvatar={handleChooseAvatar}
+          >
+            选择微信头像
+          </NativeButton>
+        ) : (
+          <Text className="block text-xs text-gray-400">头像会优先使用微信小程序头像</Text>
+        )}
       </View>
       <View className="rounded-xl bg-gray-50 px-4 py-3">
         <Input
-          type="text"
+          type={isWeapp ? ('nickname' as any) : 'text'}
           placeholder="请输入昵称"
           value={memberName}
           onInput={(event: any) => handleNameInput(event.detail.value || '')}
           className="w-full bg-transparent"
         />
       </View>
-      <Text className="mt-1 block text-xs text-gray-400">请输入你想在房间里展示的昵称</Text>
+      <Text className="mt-1 block text-xs text-gray-400">
+        微信里如果直接返回“微信用户”，需要你手动确认昵称，这是微信侧的隐私限制
+      </Text>
     </View>
   )
 
@@ -262,8 +318,8 @@ export default function JoinPage() {
             <Text className="block text-2xl font-bold tracking-wider text-blue-600">
               {createdGroup?.invite_code}
             </Text>
-            <Button variant="ghost" size="sm" onClick={showInviteCode}>
-              <Text className="block text-sm text-gray-500">查看</Text>
+            <Button variant="ghost" size="sm" onClick={copyInviteCode}>
+              {copied ? <Check size={16} color="#22c55e" /> : <Copy size={16} color="#666" />}
             </Button>
           </View>
         </CardContent>
@@ -275,8 +331,8 @@ export default function JoinPage() {
             <Text className="block">邀请好友加入</Text>
           </NativeButton>
         ) : (
-          <Button className="w-full" onClick={showInviteCode}>
-            <Text className="block">查看邀请码</Text>
+          <Button className="w-full" onClick={copyInviteCode}>
+            <Text className="block">复制邀请码</Text>
           </Button>
         )}
       </View>
