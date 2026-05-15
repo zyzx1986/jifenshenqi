@@ -10,7 +10,74 @@ import devConfig from './dev';
 import prodConfig from './prod';
 import pkg from '../package.json';
 
+const currentTaroEnv = process.env.TARO_ENV || '';
+
 dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+if (currentTaroEnv) {
+  dotenv.config({
+    path: path.resolve(__dirname, `../.env.${currentTaroEnv}.local`),
+    override: true,
+  });
+}
+
+const toEnvSuffix = (taroEnv: string) => taroEnv.trim().toUpperCase();
+
+const readFirstEnv = (keys: string[]) => {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return '';
+};
+
+const toWebsocketBase = (value: string) => {
+  if (!value) {
+    return '';
+  }
+
+  if (value.startsWith('ws://') || value.startsWith('wss://')) {
+    return value;
+  }
+
+  if (value.startsWith('http://')) {
+    return value.replace(/^http:\/\//, 'ws://');
+  }
+
+  if (value.startsWith('https://')) {
+    return value.replace(/^https:\/\//, 'wss://');
+  }
+
+  return value;
+};
+
+const resolveProjectHttpBase = (taroEnv: string) => {
+  const envSuffix = toEnvSuffix(taroEnv);
+
+  return readFirstEnv([
+    envSuffix ? `PROJECT_HTTP_BASE_${envSuffix}` : '',
+    envSuffix ? `PROJECT_DOMAIN_${envSuffix}` : '',
+    'PROJECT_HTTP_BASE',
+    'PROJECT_DOMAIN',
+    'COZE_PROJECT_DOMAIN_DEFAULT',
+  ].filter(Boolean));
+};
+
+const resolveProjectWsBase = (taroEnv: string) => {
+  const envSuffix = toEnvSuffix(taroEnv);
+  const explicitWsBase = readFirstEnv([
+    envSuffix ? `PROJECT_WS_BASE_${envSuffix}` : '',
+    'PROJECT_WS_BASE',
+  ].filter(Boolean));
+
+  if (explicitWsBase) {
+    return explicitWsBase;
+  }
+
+  return toWebsocketBase(resolveProjectHttpBase(taroEnv));
+};
 
 const generateTTProjectConfig = (outputRoot: string) => {
   const config = {
@@ -44,6 +111,8 @@ export default defineConfig<'vite'>(async (merge, _env) => {
   const defaultOutputRoot = outputRootMap[process.env.TARO_ENV || ''] || 'dist';
   const outputRoot = process.env.OUTPUT_ROOT?.trim() || defaultOutputRoot;
   const isH5 = process.env.TARO_ENV === 'h5';
+  const resolvedProjectHttpBase = resolveProjectHttpBase(process.env.TARO_ENV || '');
+  const resolvedProjectWsBase = resolveProjectWsBase(process.env.TARO_ENV || '');
 
   const buildMiniCIPluginConfig = () => {
     const hasWeappConfig = !!process.env.TARO_APP_WEAPP_APPID;
@@ -90,18 +159,8 @@ export default defineConfig<'vite'>(async (merge, _env) => {
     outputRoot,
     plugins: ['@tarojs/plugin-generator', ...buildMiniCIPluginConfig()],
     defineConstants: {
-      PROJECT_HTTP_BASE: JSON.stringify(
-        process.env.PROJECT_HTTP_BASE ||
-          process.env.PROJECT_DOMAIN ||
-          process.env.COZE_PROJECT_DOMAIN_DEFAULT ||
-          '',
-      ),
-      PROJECT_WS_BASE: JSON.stringify(
-        process.env.PROJECT_WS_BASE ||
-          process.env.PROJECT_DOMAIN ||
-          process.env.COZE_PROJECT_DOMAIN_DEFAULT ||
-          '',
-      ),
+      PROJECT_HTTP_BASE: JSON.stringify(resolvedProjectHttpBase),
+      PROJECT_WS_BASE: JSON.stringify(resolvedProjectWsBase),
       TARO_ENV: JSON.stringify(process.env.TARO_ENV),
     },
     copy: {

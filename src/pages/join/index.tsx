@@ -246,9 +246,7 @@ function createRandomNickname() {
 }
 
 function createCreativeRoomName() {
-  const base = getRandomItem(CREATIVE_ROOM_NAMES)
-  const suffix = Math.floor(10 + Math.random() * 90)
-  return `${base}${suffix}`
+  return getRandomItem(CREATIVE_ROOM_NAMES)
 }
 
 export default function JoinPage() {
